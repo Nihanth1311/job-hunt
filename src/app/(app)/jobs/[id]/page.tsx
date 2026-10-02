@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { JobsLink } from "@/components/jobs-memory";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { adoptSharedJob } from "@/lib/jobs";
 import { FitLine } from "@/components/fit-line";
 import { JobAbout } from "@/components/job-about";
 import { JobActions } from "@/components/job-actions";
@@ -34,7 +35,12 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
     getBaseResumes(uid),
     getSecrets(uid),
   ]);
-  if (!data) notFound();
+  if (!data) {
+    // A link someone shared from their feed: open (or add) the same job in this person's feed.
+    const own = await adoptSharedJob(uid, id);
+    if (own && own !== id) redirect(`/jobs/${own}`);
+    notFound();
+  }
   const { job, application, versions, moreFromCompany, similar } = data;
 
   const baseResumes: Partial<Record<Track, string>> = {};

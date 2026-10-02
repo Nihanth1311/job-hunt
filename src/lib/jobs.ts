@@ -116,6 +116,51 @@ export async function insertJobs(userId: string, rows: NewJob[]): Promise<Job[]>
   return inserted;
 }
 
+/**
+ * A job link someone shared from their own feed (job ids are per person). Returns the id of the
+ * same job in `userId`'s feed, adding it there (scored for them) if they don't have it yet, or
+ * null if no such job exists. Only the posting is copied; the sharer's tracker and notes stay theirs.
+ */
+export async function adoptSharedJob(userId: string, id: string): Promise<string | null> {
+  const db = await getDb();
+  const [job] = await db.select().from(schema.jobs).where(eq(schema.jobs.id, id));
+  if (!job) return null;
+  if (job.userId === userId) return job.id;
+  const mine = and(eq(schema.jobs.userId, userId), eq(schema.jobs.dedupeKey, job.dedupeKey));
+  const [have] = await db.select({ id: schema.jobs.id }).from(schema.jobs).where(mine);
+  if (have) return have.id;
+
+  const [profile, prefs] = await Promise.all([getProfile(userId), getPreferences(userId)]);
+  const row = toNewJob(
+    userId,
+    {
+      source: job.source,
+      externalId: `shared:${job.id}`,
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      isRemote: job.isRemote,
+      url: job.url,
+      companyUrl: job.companyUrl,
+      description: job.description,
+      descriptionIsPreview: job.descriptionIsPreview,
+      postedAt: job.postedAt,
+      salary:
+        job.salaryMinLpa !== null || job.salaryMaxLpa !== null
+          ? { min: job.salaryMinLpa, max: job.salaryMaxLpa, estimated: job.salaryEstimated }
+          : undefined,
+      publisher: job.publisher,
+      requiredExpMonths: job.requiredExpMonths,
+    },
+    profile,
+    prefs,
+  );
+  // Keep it even if it's older than the feed's 30-day window: someone chose to share it.
+  await db.insert(schema.jobs).values(row).onConflictDoNothing();
+  const [added] = await db.select({ id: schema.jobs.id }).from(schema.jobs).where(mine);
+  return added?.id ?? null;
+}
+
 /** Matching fields for a stored job, recomputed from its title and description. */
 function reanalyze(
   j: Pick<Job, "title" | "description" | "descriptionIsPreview" | "requiredExpMonths" | "salaryMinLpa" | "salaryMaxLpa" | "salaryEstimated">,
