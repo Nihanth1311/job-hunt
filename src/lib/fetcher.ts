@@ -39,6 +39,12 @@ export interface FetchSummary {
 }
 
 const POOL_HOURS = 3;
+
+/**
+ * The wake-up comes from an hourly cron that is often a few minutes late. Count something as
+ * due this much early, so a slightly-late hour never skips a round (15 min per hour, max 45).
+ */
+export const earlyMs = (hours: number) => Math.min(45, 15 * hours) * 60_000;
 /** "Fetch now" refreshes the pool too, unless it was refreshed this recently. */
 const POOL_MIN_MINUTES = 20;
 
@@ -116,20 +122,21 @@ async function logged(userId: string, source: JobSource, run: () => Promise<{ fe
 // ---------- 1. The shared pool ----------
 
 /** Refresh the shared pool if it's due (or, with `force`, unless it was just refreshed). One refresh at a time. */
-export function refreshPool(force = false): Promise<SourceResult[]> {
-  g.__jobHuntPool ??= doRefreshPool(force).finally(() => {
+/** `maxAgeHours`: how old the pool may be for this fetch (the person's own fetch period). */
+export function refreshPool(force = false, maxAgeHours = POOL_HOURS): Promise<SourceResult[]> {
+  g.__jobHuntPool ??= doRefreshPool(force, maxAgeHours).finally(() => {
     g.__jobHuntPool = undefined;
   });
   return g.__jobHuntPool;
 }
 
-async function doRefreshPool(force: boolean): Promise<SourceResult[]> {
+async function doRefreshPool(force: boolean, maxAgeHours: number): Promise<SourceResult[]> {
   const db = await getDb();
   const results: SourceResult[] = [];
   for (const source of SOURCES.filter((s) => s.scope === "shared")) {
     const last = await lastSuccess(GLOBAL, source.id);
     const age = last ? Date.now() - last.getTime() : Infinity;
-    if (age < (force ? POOL_MIN_MINUTES * 60_000 : POOL_HOURS * 3_600_000)) {
+    if (age < (force ? POOL_MIN_MINUTES * 60_000 : maxAgeHours * 3_600_000 - earlyMs(maxAgeHours))) {
       results.push({ id: source.id, label: source.label, status: "skipped", fetched: 0, inserted: 0, message: "Checked recently" });
       continue;
     }
@@ -186,7 +193,7 @@ async function doFetch(userId: string, force: boolean, signal: AbortSignal): Pro
 
   // Company careers sites: refresh the shared pool if due, then take this person's share.
   const shared = SOURCES.find((s) => s.scope === "shared")!;
-  const pool = await unlessStopped(refreshPool(force), signal);
+  const pool = await unlessStopped(refreshPool(force, prefs.fetchIntervalHours), signal);
   if (pool && !signal.aborted) {
     const fromPool = await fillFromPool(userId);
     newJobs.push(...fromPool);

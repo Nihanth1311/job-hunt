@@ -74,7 +74,7 @@ export default async function SettingsPage() {
       </div>
 
       <div className="mb-5">
-        <PushCard publicKey={pushKey} mode={pushMode} devices={pushSubs.map((s) => s.device)} />
+        <PushCard publicKey={pushKey} mode={pushMode} devices={pushSubs.map((s) => s.device)} intervalHours={prefs.fetchIntervalHours} />
       </div>
 
       <div className="mb-5">

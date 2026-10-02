@@ -1,27 +1,31 @@
 import "server-only";
-import { allUserIds, cleanup, maybeSendMorningDigest, runFetch } from "./fetcher";
+import { allUserIds, cleanup, earlyMs, maybeSendMorningDigest, runFetch } from "./fetcher";
 import { ensureScored } from "./jobs";
-import { getState } from "./settings";
+import { getPreferences, getState } from "./settings";
 
 const TICK_MS = 10 * 60 * 1000;
-const g = globalThis as unknown as { __jobHuntScheduler?: NodeJS.Timeout };
+const g = globalThis as unknown as { __jobHuntScheduler?: NodeJS.Timeout; __jobHuntTick?: Promise<void> };
 
-/** The automatic fetch: the same for everyone, every 3 hours. */
-export const AUTO_FETCH_HOURS = 3;
-/** The external cron is often a few minutes (sometimes half an hour) late; don't skip a round over that. */
-const SLACK_MS = 45 * 60_000;
+/** One pass at a time: a second wake-up while one is still running just waits for it. */
+export function tick(): Promise<void> {
+  g.__jobHuntTick ??= doTick().finally(() => {
+    g.__jobHuntTick = undefined;
+  });
+  return g.__jobHuntTick;
+}
 
 /**
- * One pass for everyone: an automatic fetch for each person whose last automatic fetch was
- * about 3 hours ago (the shared pool refreshes itself), then digests. "Fetch now" doesn't
- * move this clock, so a manual fetch never costs anyone their next automatic one.
+ * One pass for everyone: an automatic fetch for each person whose own "Check for new jobs
+ * every" period has passed since their last automatic fetch (each fetch ends with their
+ * notification), then digests. "Fetch now" doesn't move this clock.
  */
-export async function tick() {
+async function doTick() {
   try {
     for (const userId of await allUserIds()) {
       await ensureScored(userId);
+      const hours = (await getPreferences(userId)).fetchIntervalHours;
       const last = await getState<string>(userId, "lastAutoFetchAt");
-      const dueAt = last ? new Date(last).getTime() + AUTO_FETCH_HOURS * 3_600_000 - SLACK_MS : 0;
+      const dueAt = last ? new Date(last).getTime() + hours * 3_600_000 - earlyMs(hours) : 0;
       if (Date.now() >= dueAt) {
         const s = await runFetch(userId);
         console.log(`[scheduler] ${userId}: ${s.inserted} new jobs`);

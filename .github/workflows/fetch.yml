@@ -1,18 +1,20 @@
 name: Fetch jobs
 
 # Render's free server sleeps when nobody is using it, so its own timer can't run.
-# This wakes it every 3 hours and fetches jobs for everyone (and sends morning digests).
+# This wakes it every hour; the app then fetches for each person whose own "Check for new jobs
+# every" period is up, notifies them, and sends morning digests. The app answers at once and
+# works in the background, so each run takes well under a minute of Actions time.
 # Needs two repository secrets: APP_URL and CRON_SECRET (Settings -> Secrets and variables -> Actions).
 on:
   schedule:
-    # UTC. 04:00 UTC = 9:30 AM in India, right after the morning digest time.
-    - cron: "0 1,4,7,10,13,16,19,22 * * *"
+    # Every hour (UTC). Not on the hour exactly: GitHub delays the busy :00 slot the most.
+    - cron: "7 * * * *"
   workflow_dispatch: # "Run workflow" button, to fetch on demand
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 8
     steps:
       - name: Wake the app and fetch jobs
         env:
@@ -22,7 +24,7 @@ jobs:
           if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
             echo "Add APP_URL and CRON_SECRET in the repo's Settings -> Secrets and variables -> Actions." && exit 1
           fi
-          # A sleeping server takes up to a minute to wake; the first fetch can take ~5 minutes.
-          curl --fail-with-body --silent --show-error --max-time 900 \
+          # A sleeping server takes up to a minute to wake; then it answers straight away.
+          curl --fail-with-body --silent --show-error --max-time 240 \
             --retry 3 --retry-delay 45 --retry-all-errors \
             -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/fetch"

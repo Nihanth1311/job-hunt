@@ -24,7 +24,17 @@ const isInstalled = () =>
   window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
 /** Phone notifications after each automatic fetch. On iPhone they need the Home Screen app. */
-export function PushCard({ publicKey, mode, devices }: { publicKey: string; mode: PushMode; devices: string[] }) {
+export function PushCard({
+  publicKey,
+  mode,
+  devices,
+  intervalHours,
+}: {
+  publicKey: string;
+  mode: PushMode;
+  devices: string[];
+  intervalHours: number;
+}) {
   const [state, setState] = useState<State>("checking");
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -87,32 +97,44 @@ export function PushCard({ publicKey, mode, devices }: { publicKey: string; mode
     <Card id="notifications" className="scroll-mt-6 p-5">
       <CardTitle icon="bell">Phone notifications</CardTitle>
       <p className="-mt-2 max-w-2xl text-sm text-muted">
-        Jobs are fetched for everyone automatically every 3 hours; you get a notification when yours finds new jobs (nothing between
-        11 pm and 7 am: overnight finds arrive with the first one in the morning). Press <b>Fetch now</b> and you can close the app:
-        you&apos;ll get a notification when it&apos;s done.
+        Your jobs are fetched automatically every {intervalHours} hour{intervalHours > 1 ? "s" : ""} (change it under{" "}
+        <b>Check for new jobs every</b>); you get a notification when a fetch finds new jobs. Nothing between 11 pm and 7 am:
+        overnight finds arrive with the first one in the morning. Press <b>Fetch now</b> and you can close the app: you&apos;ll get a
+        notification when it&apos;s done.
       </p>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        {state === "checking" && <span className="text-sm text-muted">Checking this device…</span>}
-        {state === "on" && (
-          <>
-            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-good">
-              <span className="size-1.5 rounded-full bg-good" /> On for this device
-            </span>
-            <Button size="sm" variant="secondary" disabled={pending} onClick={() => start(async () => setMsg(await testPush()))}>
-              Send a test
-            </Button>
-            <Button size="sm" variant="ghost" disabled={pending} onClick={disable}>
-              Turn off
-            </Button>
-          </>
-        )}
-        {state === "off" && (
-          <Button size="sm" disabled={pending} onClick={enable}>
-            Turn on for this device
-          </Button>
-        )}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg px-3.5 py-3 ring-1 ring-inset ring-line">
+        <label htmlFor="push-toggle" className="min-w-0 cursor-pointer">
+          <span className="block text-sm font-medium">Notifications on this device</span>
+          <span className="block text-xs text-muted">
+            {state === "checking" ? "Checking…" : state === "on" ? "On" : state === "off" ? "Off" : "Not available here (see below)"}
+          </span>
+        </label>
+        <button
+          id="push-toggle"
+          type="button"
+          role="switch"
+          aria-checked={state === "on"}
+          disabled={pending || (state !== "on" && state !== "off")}
+          onClick={state === "on" ? disable : enable}
+          className={cx(
+            "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50",
+            state === "on" ? "bg-accent" : "bg-line-strong",
+          )}
+        >
+          <span
+            className={cx(
+              "inline-block size-5 rounded-full bg-surface-solid shadow transition-transform",
+              state === "on" ? "translate-x-6" : "translate-x-1",
+            )}
+          />
+        </button>
       </div>
+      {state === "on" && (
+        <Button size="sm" variant="secondary" className="mt-3" disabled={pending} onClick={() => start(async () => setMsg(await testPush()))}>
+          Send a test
+        </Button>
+      )}
 
       {state === "install" && (
         <Callout tone="warn" className="mt-4 text-sm">

@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { after } from "next/server";
 import { tick } from "@/lib/scheduler";
 
 // For hosts without a long-running server (e.g. Vercel): call this from any cron
@@ -15,8 +16,10 @@ function authorized(request: Request): boolean {
 
 async function handle(request: Request) {
   if (!authorized(request)) return new Response("Unauthorized", { status: 401 });
-  await tick();
-  return Response.json({ ok: true });
+  // Answer at once and fetch in the background: the server stays awake while it works, and the
+  // caller (GitHub Actions) isn't billed for minutes spent waiting.
+  after(() => tick());
+  return Response.json({ ok: true, started: true }, { status: 202 });
 }
 
 export const GET = handle;
