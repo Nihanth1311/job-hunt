@@ -25,7 +25,7 @@ export interface NavUser {
 
 export function Nav({ user }: { user: NavUser }) {
   const pathname = usePathname();
-  const links = user.admin ? [...LINKS, { href: "/admin", label: "Access", icon: "people" as IconName }] : LINKS;
+  const links = user.admin ? [...LINKS, { href: "/admin", label: "People", icon: "people" as IconName }] : LINKS;
   const active = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
   // "Jobs" returns to the list with the filters you last used.
   const jobsHref = useJobsHref();

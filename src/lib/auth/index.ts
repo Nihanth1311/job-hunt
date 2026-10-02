@@ -46,8 +46,19 @@ export const getSessionUser = cache(async (): Promise<User | null> => {
     .from(schema.sessions)
     .innerJoin(schema.users, eq(schema.sessions.userId, schema.users.id))
     .where(and(eq(schema.sessions.id, sha256(token)), gt(schema.sessions.expiresAt, new Date())));
-  return row?.user ?? null;
+  const user = row?.user ?? null;
+  // "Last seen", for the Access page. Written at most every few minutes, not on every request.
+  if (user && (!user.lastSeenAt || Date.now() - user.lastSeenAt.getTime() > SEEN_EVERY_MS)) {
+    const now = new Date();
+    await db.update(schema.users).set({ lastSeenAt: now }).where(eq(schema.users.id, user.id));
+    user.lastSeenAt = now;
+  }
+  return user;
 });
+
+const SEEN_EVERY_MS = 3 * 60_000;
+/** Used the app this recently → shown as "Active". */
+export const ACTIVE_WITHIN_MS = 10 * 60_000;
 
 /** For pages, actions and routes: the signed-in person, or off to the login page. */
 export async function requireUser(): Promise<User> {

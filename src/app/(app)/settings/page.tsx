@@ -146,7 +146,7 @@ export default async function SettingsPage() {
               <RestoreBackup />
               {user.role === "admin" && (
                 <a href="/admin" className={buttonClass("secondary", "sm")}>
-                  <Icon name="people" className="size-3.5" /> Manage access
+                  <Icon name="people" className="size-3.5" /> People
                 </a>
               )}
               <form action="/api/auth/logout" method="post">

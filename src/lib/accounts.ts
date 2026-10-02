@@ -1,6 +1,6 @@
 import "server-only";
 import { asc, eq } from "drizzle-orm";
-import { MAX_USERS, OWNER_ID } from "./auth";
+import { ACTIVE_WITHIN_MS, MAX_USERS, OWNER_ID } from "./auth";
 import { getDb, schema } from "./db";
 import type { User } from "./db/schema";
 import { fillFromPool } from "./fetcher";
@@ -40,6 +40,9 @@ export interface Person {
   userId: string | null;
   invited: boolean;
   lastLoginAt: Date | null;
+  lastSeenAt: Date | null;
+  /** Used the app in the last few minutes. */
+  active: boolean;
 }
 
 /** Everyone with an account, plus invites not used yet. */
@@ -58,10 +61,12 @@ export async function listPeople(): Promise<Person[]> {
     userId: u.id,
     invited: invited.has(u.email),
     lastLoginAt: u.lastLoginAt,
+    lastSeenAt: u.lastSeenAt ?? u.lastLoginAt,
+    active: Boolean(u.lastSeenAt && Date.now() - u.lastSeenAt.getTime() < ACTIVE_WITHIN_MS),
   }));
   for (const i of invites) {
     if (!users.some((u) => u.email === i.email)) {
-      people.push({ email: i.email, name: "", image: null, role: "user", userId: null, invited: true, lastLoginAt: null });
+      people.push({ email: i.email, name: "", image: null, role: "user", userId: null, invited: true, lastLoginAt: null, lastSeenAt: null, active: false });
     }
   }
   return people;

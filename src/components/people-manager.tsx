@@ -5,7 +5,7 @@ import { inviteAction, removePersonAction } from "@/actions/settings";
 import { timeAgo } from "@/lib/format";
 import { Avatar } from "./avatar";
 import { copyText } from "./claude";
-import { Badge, Button, Card, CardTitle, Icon } from "./ui";
+import { Badge, Button, Card, Icon } from "./ui";
 
 interface Row {
   email: string;
@@ -15,98 +15,53 @@ interface Row {
   userId: string | null;
   invited: boolean;
   lastLoginAt: string | null;
+  lastSeenAt: string | null;
+  /** Used the app in the last few minutes (worked out on the server). */
+  active: boolean;
 }
 
-/**
- * Who has access: people already using the app, and people who've been given access but
- * haven't signed in yet. Give access by Gmail; take it away (optionally deleting their data).
- */
+/** Everyone who can use the app, and whether they're using it now. Adding someone is tucked behind "+ Add person". */
 export function PeopleManager({ people, me, max }: { people: Row[]; me: string; max: number }) {
-  const [email, setEmail] = useState("");
-  const [added, setAdded] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-
-  const using = people.filter((p) => p.userId);
-  const waiting = people.filter((p) => !p.userId);
-  const full = people.length >= max;
-
-  const add = () =>
-    start(async () => {
-      const e = email.trim();
-      const err = await inviteAction(e);
-      setError(err);
-      setAdded(err ? null : e);
-      if (!err) setEmail("");
-    });
+  // Active people first, then most recently seen, then people who haven't signed in yet.
+  const seen = (p: Row) => (p.lastSeenAt ? new Date(p.lastSeenAt).getTime() : 0);
+  const sorted = [...people].sort((a, b) => seen(b) - seen(a));
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <Card className="p-5">
-        <CardTitle icon="people">
-          Who has access · {people.length} of {max}
-        </CardTitle>
-
-        <Section title="Using the app" count={using.length} empty="Nobody has signed in yet.">
-          {using.map((p) => (
-            <PersonRow key={p.email} p={p} me={me}>
-              <span suppressHydrationWarning>{p.lastLoginAt ? `Active ${timeAgo(p.lastLoginAt)}` : "Signed up"}</span>
-            </PersonRow>
-          ))}
-        </Section>
-
-        {waiting.length > 0 && (
-          <Section title="Hasn't signed in yet" count={waiting.length}>
-            {waiting.map((p) => (
-              <PersonRow key={p.email} p={p} me={me}>
-                Can sign in with Google
-              </PersonRow>
-            ))}
-          </Section>
-        )}
-      </Card>
-
-      <Card className="h-fit p-5">
-        <CardTitle icon="plus">Give someone access</CardTitle>
-        <p className="-mt-2 mb-4 text-sm text-muted">Add their Gmail. Only Google accounts on this list can sign in.</p>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            add();
-          }}
-          className="space-y-3"
-        >
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@gmail.com" className="field" />
-          <Button type="submit" variant="primary" className="w-full" disabled={pending || full}>
-            {full ? `Full (${max} people)` : pending ? "Adding…" : "Give access"}
-          </Button>
-        </form>
-
-        {error && <p className="mt-3 text-sm text-bad">{error}</p>}
-        {added && <SharePrompt email={added} />}
-
-        <p className="mt-4 text-xs leading-relaxed text-muted">
-          While your Google sign-in is in <b>Testing</b>, also add their Gmail as a test user in Google Cloud Console (OAuth consent
-          screen → Audience), or publish the app once.
-        </p>
-      </Card>
-    </div>
+    <Card className="p-5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+          <Icon name="people" className="size-4 text-muted" />
+          People · {people.length} of {max}
+        </h2>
+        <AddPerson full={people.length >= max} />
+      </div>
+      <ul className="divide-y divide-line">
+        {sorted.map((p) => (
+          <PersonRow key={p.email} p={p} me={me} />
+        ))}
+      </ul>
+    </Card>
   );
 }
 
-function Section({ title, count, empty, children }: { title: string; count: number; empty?: string; children: React.ReactNode }) {
+function Status({ p }: { p: Row }) {
+  if (!p.userId) return <Badge tone="neutral">Hasn&apos;t signed in yet</Badge>;
+  if (p.active) {
+    return (
+      <Badge tone="good">
+        <span className="size-1.5 rounded-full bg-good" /> Active
+      </Badge>
+    );
+  }
   return (
-    <section className="mt-1 first-of-type:mt-0 [&+section]:mt-5">
-      <h3 className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
-        {title} <span className="tabular-nums">{count}</span>
-      </h3>
-      {count === 0 && empty ? <p className="py-3 text-sm text-muted">{empty}</p> : <ul className="divide-y divide-line">{children}</ul>}
-    </section>
+    <span className="text-xs text-muted" suppressHydrationWarning>
+      {p.lastSeenAt ? `Last active ${timeAgo(p.lastSeenAt)}` : "Signed up"}
+    </span>
   );
 }
 
-/** One person: who they are, their status, and (for everyone but admins) taking access away. */
-function PersonRow({ p, me, children }: { p: Row; me: string; children: React.ReactNode }) {
+/** One person: who they are, whether they're active, and (for everyone but admins) taking access away. */
+function PersonRow({ p, me }: { p: Row; me: string }) {
   const [confirm, setConfirm] = useState(false);
   const [pending, start] = useTransition();
   const remove = (deleteData: boolean) => start(async () => (await removePersonAction(p.email, deleteData), setConfirm(false)));
@@ -118,53 +73,94 @@ function PersonRow({ p, me, children }: { p: Row; me: string; children: React.Re
         <p className="truncate text-sm font-medium">
           {p.name || p.email}
           {p.email === me && <span className="font-normal text-muted"> (you)</span>}
+          {p.role === "admin" && <span className="ml-2 align-middle text-[11px] font-medium text-accent">Admin</span>}
         </p>
-        <p className="truncate text-xs text-muted">
-          {p.name && `${p.email} · `}
-          {children}
-        </p>
+        {p.name && <p className="truncate text-xs text-muted">{p.email}</p>}
       </div>
-      {p.role === "admin" ? (
-        <Badge tone="accent">Admin</Badge>
-      ) : confirm ? (
-        <span className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="ghost" disabled={pending} onClick={() => remove(false)}>
-            {p.userId ? "Remove access, keep their data" : "Remove access"}
-          </Button>
-          {p.userId && (
-            <Button size="sm" variant="danger" disabled={pending} onClick={() => remove(true)}>
-              Remove and delete their data
+      <Status p={p} />
+      {p.role !== "admin" &&
+        (confirm ? (
+          <span className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+            <Button size="sm" variant="ghost" disabled={pending} onClick={() => remove(false)}>
+              {p.userId ? "Remove, keep their data" : "Remove"}
             </Button>
-          )}
-          <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>
-            Cancel
-          </Button>
-        </span>
-      ) : (
-        <Button size="sm" variant="ghost" onClick={() => setConfirm(true)}>
-          Remove access
-        </Button>
-      )}
+            {p.userId && (
+              <Button size="sm" variant="danger" disabled={pending} onClick={() => remove(true)}>
+                Remove and delete data
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>
+              Cancel
+            </Button>
+          </span>
+        ) : (
+          <button type="button" onClick={() => setConfirm(true)} aria-label={`Remove ${p.email}`} className="rounded-md p-1.5 text-muted transition hover:bg-surface-2 hover:text-bad">
+            <Icon name="x" className="size-4" />
+          </button>
+        ))}
     </li>
   );
 }
 
-/** After giving access: the link to send them, with a copy button. No email is sent. */
-function SharePrompt({ email }: { email: string }) {
+/** "+ Add person": a Gmail field that opens on demand. Only Gmail accounts added here can sign in. */
+function AddPerson({ full }: { full: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [added, setAdded] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const link = typeof window === "undefined" ? "" : window.location.origin;
+  const [pending, start] = useTransition();
+
+  if (!open) {
+    return (
+      <Button size="sm" disabled={full} onClick={() => (setOpen(true), setAdded(null))}>
+        <Icon name="plus" className="size-3.5" /> {full ? "Full" : "Add person"}
+      </Button>
+    );
+  }
+
+  const link = window.location.origin;
   return (
-    <div className="mt-4 rounded-lg bg-good/8 p-3.5 text-sm ring-1 ring-inset ring-good/20">
-      <p className="flex items-center gap-1.5 font-medium text-good">
-        <Icon name="check" className="size-4" strokeWidth={2.5} /> {email} now has access
-      </p>
-      <p className="mt-1 text-muted">Send them this link to sign in with Google:</p>
-      <div className="mt-2 flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-md bg-surface-solid px-2.5 py-1.5 text-xs ring-1 ring-line">{link}</code>
-        <Button size="sm" onClick={() => copyText(link).then((ok) => setCopied(ok))}>
-          <Icon name={copied ? "check" : "copy"} className="size-3.5" /> {copied ? "Copied" : "Copy"}
-        </Button>
-      </div>
+    <div className="w-full rounded-lg bg-surface-2 p-3">
+      {added ? (
+        <div className="text-sm">
+          <p className="font-medium text-good">{added} can now sign in.</p>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-md bg-surface-solid px-2.5 py-1.5 text-xs ring-1 ring-line">{link}</code>
+            <Button size="sm" onClick={() => copyText(link).then(setCopied)}>
+              <Icon name={copied ? "check" : "copy"} className="size-3.5" /> {copied ? "Copied" : "Copy link"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => (setOpen(false), setCopied(false))}>
+              Done
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            start(async () => {
+              const err = await inviteAction(email);
+              setError(err);
+              if (!err) {
+                setAdded(email.trim());
+                setEmail("");
+              }
+            });
+          }}
+          className="flex flex-wrap items-center gap-2"
+        >
+          <input type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="their Gmail" className="field min-w-0 flex-1 basis-48 py-1.5" />
+          <Button type="submit" size="sm" variant="primary" disabled={pending}>
+            {pending ? "Adding…" : "Add"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => (setOpen(false), setError(null))}>
+            Cancel
+          </Button>
+          {error && <p className="w-full text-xs text-bad">{error}</p>}
+          <p className="w-full text-xs text-muted">Also add them as a test user in Google Cloud Console while sign-in is in Testing.</p>
+        </form>
+      )}
     </div>
   );
 }

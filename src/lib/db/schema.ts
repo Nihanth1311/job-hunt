@@ -27,6 +27,8 @@ export const users = pgTable(
     role: text("role").notNull().default("user"), // admin | user
     createdAt: ts("created_at").notNull().defaultNow(),
     lastLoginAt: ts("last_login_at"),
+    /** Last time they used the app (updated at most every few minutes). */
+    lastSeenAt: ts("last_seen_at"),
   },
   (t) => [uniqueIndex("users_email_idx").on(t.email)],
 );
