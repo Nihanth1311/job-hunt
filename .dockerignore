@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.github
+.claude
+data
+docs
+*.md
+.env
+.env.*
+!.env.example

@@ -1,0 +1,4 @@
+# Keep Linux line endings in the repo (the server runs Linux).
+* text=auto eol=lf
+*.png binary
+*.ico binary

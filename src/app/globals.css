@@ -1,0 +1,298 @@
+@import "tailwindcss";
+
+/* Theme is chosen by data-theme on <html> (set before paint by the script in layout.tsx). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * Look: warm stone and terracotta. Solid white surfaces with hairline borders, one terracotta
+ * accent used only for actions and highlights, earthy tones for status and role types, and a
+ * bold, tightly set grotesk for headings. No gradients, glass or glow.
+ */
+
+/* ---------- Light ---------- */
+:root {
+  --bg: #f3f1ee;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --surface-2: rgba(41, 37, 36, 0.05);
+  --line: #e2ddd6;
+  --line-strong: #cfc8be;
+
+  --ink: #1c1917;
+  --muted: #6e655c;
+
+  --accent: #c2410c;
+  --accent-hover: #9a3412;
+  --accent-ink: #fff7f2;
+  --accent-soft: rgba(194, 65, 12, 0.09);
+
+  --good: #4d7c0f;
+  --warn: #b45309;
+  --bad: #991b1b;
+
+  /* Role types: earthy, quiet. */
+  --cat-fullstack: #7c3f6e;
+  --cat-frontend: #2f5d8a;
+  --cat-backend: #3f6b4f;
+  --cat-devops: #a16207;
+  --cat-sde: #57534e;
+
+  --shadow-sm: 0 1px 0 rgba(28, 25, 23, 0.04);
+  --shadow: 0 1px 2px rgba(28, 25, 23, 0.06), 0 2px 8px -2px rgba(28, 25, 23, 0.06);
+  --shadow-lg: 0 2px 4px rgba(28, 25, 23, 0.05), 0 18px 40px -14px rgba(28, 25, 23, 0.25);
+  color-scheme: light;
+}
+
+/* ---------- Dark: warm charcoal ---------- */
+@media (prefers-color-scheme: dark) {
+  /* Only used if the theme script could not run. */
+  :root:not([data-theme="light"]) {
+    --bg: #171514;
+    --surface: #1f1c1a;
+    --surface-solid: #1f1c1a;
+    --surface-2: rgba(255, 240, 225, 0.05);
+    --line: #2e2a27;
+    --line-strong: #3f3a35;
+
+    --ink: #ede8e3;
+    --muted: #a39b92;
+
+    --accent: #ea7a47;
+    --accent-hover: #f29468;
+    --accent-ink: #1c0f08;
+    --accent-soft: rgba(234, 122, 71, 0.13);
+
+    --good: #a3c266;
+    --warn: #e0a34a;
+    --bad: #f07b6e;
+
+    --cat-fullstack: #d39bc6;
+    --cat-frontend: #8db3db;
+    --cat-backend: #93c29f;
+    --cat-devops: #e0b252;
+    --cat-sde: #b9b1a8;
+
+    --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.3);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.35), 0 18px 40px -14px rgba(0, 0, 0, 0.65);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #171514;
+  --surface: #1f1c1a;
+  --surface-solid: #1f1c1a;
+  --surface-2: rgba(255, 240, 225, 0.05);
+  --line: #2e2a27;
+  --line-strong: #3f3a35;
+
+  --ink: #ede8e3;
+  --muted: #a39b92;
+
+  --accent: #ea7a47;
+  --accent-hover: #f29468;
+  --accent-ink: #1c0f08;
+  --accent-soft: rgba(234, 122, 71, 0.13);
+
+  --good: #a3c266;
+  --warn: #e0a34a;
+  --bad: #f07b6e;
+
+  --cat-fullstack: #d39bc6;
+  --cat-frontend: #8db3db;
+  --cat-backend: #93c29f;
+  --cat-devops: #e0b252;
+  --cat-sde: #b9b1a8;
+
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.3);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.35), 0 18px 40px -14px rgba(0, 0, 0, 0.65);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-solid: var(--surface-solid);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-cat-fullstack: var(--cat-fullstack);
+  --color-cat-frontend: var(--cat-frontend);
+  --color-cat-backend: var(--cat-backend);
+  --color-cat-devops: var(--cat-devops);
+  --color-cat-sde: var(--cat-sde);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-body);
+  --font-mono: var(--font-code);
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
+}
+
+/* Page titles, big numbers: bold and tight. */
+.font-display {
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* Theme switches shouldn't animate every surface on the page. */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+}
+
+/* A plain surface: solid fill, hairline border. */
+@utility panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Floats above the page: toasts, sticky save bars. */
+@utility panel-raised {
+  background: var(--surface-solid);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Cards you can click into: lift a little on hover. */
+@utility lift {
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+  &:hover {
+    transform: translateY(-1px);
+    border-color: var(--line-strong);
+    box-shadow: var(--shadow);
+  }
+}
+
+/* Page content settles in on load, top to bottom. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.page-enter > * {
+  /* "backwards", not "both": a finished animation must not keep a transform, or it would trap
+     position:fixed children (sheets, toasts) inside the page instead of the screen. */
+  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+.page-enter > :nth-child(2) { animation-delay: 40ms; }
+.page-enter > :nth-child(3) { animation-delay: 80ms; }
+.page-enter > :nth-child(4) { animation-delay: 120ms; }
+.page-enter > :nth-child(n + 5) { animation-delay: 160ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter > * {
+    animation: none;
+  }
+  .lift:hover {
+    transform: none;
+  }
+}
+
+/* Grid and flex children may shrink below their content (long titles, tables), so nothing
+   can push the page wider than a phone screen. Wide content scrolls or truncates inside its box. */
+@layer base {
+  .grid > * {
+    min-width: 0;
+  }
+  html,
+  body {
+    overflow-x: clip;
+  }
+}
+
+/* Form controls share one look. */
+@layer components {
+  .field {
+    /* 16px on phones: iOS zooms the page into any smaller text box you tap. */
+    @apply w-full rounded-lg border border-line bg-surface-solid px-3.5 py-2.5 text-base text-ink outline-none sm:text-sm transition placeholder:text-muted/70 hover:border-line-strong focus:border-accent/60 focus:ring-3 focus:ring-accent/12;
+  }
+  select.field {
+    @apply cursor-pointer appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238f877a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.75rem center;
+    background-size: 1rem;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-medium text-muted;
+  }
+  input[type="checkbox"] {
+    @apply size-4 cursor-pointer rounded accent-[var(--accent)];
+  }
+}
+
+/* Inner scroll areas (e.g. the Jobs filter panel): keep room for the bar so content never jumps. */
+.filter-scroll {
+  scrollbar-gutter: stable;
+}
+
+/* Thin, quiet scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* Printable resume page. */
+.resume {
+  font-family: Arial, Helvetica, sans-serif;
+  color: #111;
+  line-height: 1.42;
+  font-size: 10.5pt;
+}
+.resume h1 { font-size: 20pt; font-weight: 700; margin: 0 0 2pt; letter-spacing: -0.01em; }
+.resume h2 { font-size: 11pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 12pt 0 4pt; padding-bottom: 2pt; border-bottom: 1px solid #bbb; }
+.resume h3 { font-size: 10.5pt; font-weight: 700; margin: 8pt 0 2pt; }
+.resume h4 { font-size: 10.5pt; font-weight: 600; margin: 6pt 0 2pt; }
+.resume p { margin: 2pt 0 4pt; }
+.resume ul { margin: 2pt 0 4pt; padding-left: 14pt; list-style: disc; }
+.resume ul ul { list-style: circle; }
+.resume li { margin: 1pt 0; }
+.resume a { color: inherit; text-decoration: none; }
+.resume hr { border: 0; border-top: 1px solid #ccc; margin: 8pt 0; }
+.resume code { font-family: inherit; }
+
+@media print {
+  @page { size: A4; margin: 14mm 14mm; }
+  body { background: #fff !important; }
+  .no-print { display: none !important; }
+  .print-sheet { box-shadow: none !important; margin: 0 !important; padding: 0 !important; width: auto !important; min-height: 0 !important; border-radius: 0 !important; }
+}
