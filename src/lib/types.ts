@@ -1,4 +1,4 @@
-export const TRACKS = ["frontend", "backend", "fullstack", "devops"] as const;
+export const TRACKS = ["frontend", "backend", "fullstack", "devops", "data", "security"] as const;
 export type Track = (typeof TRACKS)[number];
 
 export const TRACK_LABEL: Record<Track, string> = {
@@ -6,6 +6,8 @@ export const TRACK_LABEL: Record<Track, string> = {
   backend: "Backend",
   fullstack: "Full Stack",
   devops: "DevOps",
+  data: "Data Science",
+  security: "Cybersecurity",
 };
 
 /** The job title you present yourself as on that track's resume. */
@@ -14,9 +16,11 @@ export const TRACK_TITLE: Record<Track, string> = {
   backend: "Backend Developer",
   fullstack: "Full Stack Developer",
   devops: "DevOps Engineer",
+  data: "Data Scientist",
+  security: "Cybersecurity Engineer",
 };
 
-export const CATEGORIES = ["fullstack", "frontend", "backend", "devops", "sde", "other"] as const;
+export const CATEGORIES = ["fullstack", "frontend", "backend", "devops", "data", "security", "sde", "other"] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 export const CATEGORY_LABEL: Record<Category, string> = {
@@ -24,6 +28,8 @@ export const CATEGORY_LABEL: Record<Category, string> = {
   frontend: "Frontend",
   backend: "Backend",
   devops: "DevOps",
+  data: "Data Science",
+  security: "Cybersecurity",
   sde: "SDE",
   other: "Other",
 };
@@ -49,7 +55,7 @@ export const STATUS_LABEL: Record<AppStatus, string> = {
   rejected: "Rejected",
 };
 
-export const SKILL_GROUPS = ["frontend", "backend", "devops", "other"] as const;
+export const SKILL_GROUPS = ["frontend", "backend", "devops", "data", "security", "other"] as const;
 export type SkillGroup = (typeof SKILL_GROUPS)[number];
 
 export interface Profile {
@@ -94,7 +100,7 @@ export const DEFAULT_PROFILE: Profile = {
   location: "",
   links: "",
   yearsExperience: 1,
-  skills: { frontend: [], backend: [], devops: [], other: [] },
+  skills: { frontend: [], backend: [], devops: [], data: [], security: [], other: [] },
   masterResume: "",
   claudeNotes: "",
   claudeUrl: "https://claude.ai/new",

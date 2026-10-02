@@ -1,4 +1,4 @@
-import { TRACK_LABEL, TRACK_TITLE, type Profile, type Track } from "../types";
+import { SKILL_GROUPS, TRACK_LABEL, TRACK_TITLE, type Profile, type Track } from "../types";
 import type { Analysis } from "./analyze";
 import { experienceLabel, salaryLabel } from "./classify";
 import { LATEX_PREAMBLE, latexHeader, profileLinks } from "./latex";
@@ -71,8 +71,8 @@ function resumeBlock(track: Track, baseResume: string, masterResume: string): st
 /** Everything the app knows about me, so Claude never has to ask. */
 function aboutMeBlock(p: Profile): string {
   const { linkedin, github, other } = profileLinks(p);
-  const skills = (["frontend", "backend", "devops", "other"] as const)
-    .filter((g) => p.skills[g].length)
+  const skills = SKILL_GROUPS
+    .filter((g) => p.skills[g]?.length)
     .map((g) => `  ${g}: ${p.skills[g].join(", ")}`);
   return [
     "=== ABOUT ME ===",

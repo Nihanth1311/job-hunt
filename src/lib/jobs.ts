@@ -188,7 +188,7 @@ export async function rescoreAll(userId: string): Promise<number> {
  * Bump when the scoring or fit rules change: each person's feed is re-scored once, the next
  * time they open the app (or at the next scheduled fetch), so old scores never linger.
  */
-const SCORING_VERSION = 2;
+const SCORING_VERSION = 3;
 
 export async function ensureScored(userId: string): Promise<void> {
   if ((await getState<number>(userId, "scoringVersion")) === SCORING_VERSION) return;

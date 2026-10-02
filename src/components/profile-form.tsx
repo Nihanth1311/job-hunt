@@ -10,7 +10,18 @@ const GROUP_LABEL: Record<SkillGroup, string> = {
   frontend: "Frontend skills",
   backend: "Backend skills",
   devops: "DevOps & cloud skills",
+  data: "Data science & ML skills",
+  security: "Cybersecurity skills",
   other: "Other (Git, DSA, tools…)",
+};
+
+const PLACEHOLDER: Record<SkillGroup, string> = {
+  frontend: "React, Next.js, TypeScript, Tailwind",
+  backend: "Node.js, Express, PostgreSQL, REST APIs",
+  devops: "Docker, Kubernetes, CI/CD, AWS, Linux",
+  data: "Pandas, Scikit-learn, PyTorch, Statistics, Power BI",
+  security: "SIEM, Penetration Testing, OWASP, Network Security",
+  other: "Git, DSA, Agile",
 };
 
 const toList = (s: string) =>
@@ -22,7 +33,7 @@ const toList = (s: string) =>
 export function ProfileForm({ profile }: { profile: Profile }) {
   const [p, setP] = useState(profile);
   const [skillText, setSkillText] = useState<Record<SkillGroup, string>>(
-    Object.fromEntries(SKILL_GROUPS.map((g) => [g, profile.skills[g].join(", ")])) as Record<SkillGroup, string>,
+    Object.fromEntries(SKILL_GROUPS.map((g) => [g, (profile.skills[g] ?? []).join(", ")])) as Record<SkillGroup, string>,
   );
   const [pending, start] = useTransition();
   const [saved, setSaved] = useState("");
@@ -88,15 +99,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
                 className="field min-h-20"
                 value={skillText[g]}
                 onChange={(e) => setSkillText((s) => ({ ...s, [g]: e.target.value }))}
-                placeholder={
-                  g === "frontend"
-                    ? "React, Next.js, TypeScript, Tailwind"
-                    : g === "backend"
-                      ? "Node.js, Express, PostgreSQL, REST APIs"
-                      : g === "devops"
-                        ? "Docker, Kubernetes, CI/CD, AWS, Linux"
-                        : "Git, DSA, Agile"
-                }
+                placeholder={PLACEHOLDER[g]}
               />
             </div>
           ))}

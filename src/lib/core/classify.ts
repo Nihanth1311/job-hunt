@@ -4,6 +4,9 @@ import { extractSkills, skillGroup } from "./skills";
 // ---------- Category ----------
 
 const TITLE_RULES: [Category, RegExp][] = [
+  // DevSecOps stays DevOps; every other security title is Cybersecurity.
+  ["security", /\b(cyber[\s-]?security|cyber|(?<!devsec)security (engineer|analyst|architect|consultant|specialist|researcher|operations|associate|administrator)|information security|infosec|appsec|application security|product security|cloud security|network security|soc analyst|soc engineer|penetration tester|pen[\s-]?tester|ethical hacker|red team|blue team|threat (intelligence|hunter|analyst)|incident response|vulnerability|malware|detection engineer|grc analyst|iam (engineer|analyst)|identity (and|&) access)\b/i],
+  ["data", /\b(data scien(ce|tist)|data analyst|data analytics|data engineer(ing)?|analytics engineer|machine learning|ml engineer|mlops|ai engineer|ai\/ml|ml\/ai|applied scientist|research scientist|deep learning|nlp engineer|computer vision|gen(erative)?\s?ai|llm engineer|business intelligence|bi (developer|engineer|analyst)|decision scientist|statistician)\b/i],
   ["devops", /\b(dev\s?ops|devsecops|sre|site reliability|platform engineer|cloud (engineer|ops|infrastructure)|infrastructure engineer|build (and|&) release|release engineer|kubernetes|systems? engineer)\b/i],
   ["fullstack", /\b(full[\s-]?stack|mern|mean stack)\b/i],
   ["frontend", /\b(front[\s-]?end|ui (developer|engineer)|react(\.?js)? (developer|engineer)|angular (developer|engineer)|vue(\.?js)? (developer|engineer)|web developer)\b/i],
@@ -15,12 +18,12 @@ const TITLE_RULES: [Category, RegExp][] = [
 // (e.g. a database company's sales job lists "MongoDB" ten times).
 const NON_DEV_TITLE =
   /\b(sales|account (executive|manager|director|development)|business development|representative|recruit(er|ing|ment)|talent|coordinator|marketing|finance|financial|accountant|accounts? (payable|receivable)|legal|counsel|human resources|hr|people (partner|operations)|payroll|customer (success|support|service|experience)|support specialist|operations (manager|executive|associate|analyst)|content|copywriter|designer|partnerships?|alliances?|procurement|audit|compliance|tax|treasury|executive assistant|investor|strategy|brand|public relations|merchandis\w*|category manager|supply chain|logistics|warehouse|driver|store|collections|underwriter|credit|risk analyst|business analyst|program manager|project manager|product manager|scrum master|evaluator|translator|annotator|trainer|teacher|instructor|faculty|tutor|mentor)\b/i;
-const DEV_WORD = /\b(engineer|engineering|developer|sde|swe|programmer|devops|sre)\b/i;
+const DEV_WORD = /\b(engineer|engineering|developer|sde|swe|programmer|devops|sre|scientist|data analyst|security analyst|soc analyst|threat analyst|pen(etration)? tester)\b/i;
 const PRESALES_ENGINEER = /\b(sales|solutions?|pre-?sales|customer success|support|field|partner) engineer/i;
 
-// Native mobile, data/ML and embedded roles: real engineering, but outside the web
-// Frontend / Backend / Full Stack / DevOps tracks this app matches you to.
-const OTHER_ENGINEERING = /\b(ios|android|swift|kotlin|flutter|xamarin|mobile (developer|engineer)|data (scientist|analyst|engineer)|machine learning|ml engineer|ai\/ml|embedded|firmware|vlsi|sap|salesforce|mainframe)\b/i;
+// Native mobile and embedded roles: real engineering, but outside the tracks this app
+// matches you to (Frontend, Backend, Full Stack, DevOps, Data Science, Cybersecurity).
+const OTHER_ENGINEERING = /\b(ios|android|swift|kotlin|flutter|xamarin|mobile (developer|engineer)|embedded|firmware|vlsi|sap|salesforce|mainframe)\b/i;
 
 export function categorize(title: string, description: string): Category {
   if (NON_DEV_TITLE.test(title) && (!DEV_WORD.test(title) || PRESALES_ENGINEER.test(title))) return "other";
@@ -30,6 +33,8 @@ export function categorize(title: string, description: string): Category {
   // Title didn't say; look at what the description emphasises.
   const counts = groupCounts(extractSkills(description));
   const fe = counts.frontend, be = counts.backend, ops = counts.devops;
+  if (counts.security >= 3 && counts.security > fe + be) return "security";
+  if (counts.data >= 3 && counts.data > fe + be) return "data";
   if (fe + be + ops < 3) return "other";
   if (ops >= 3 && ops > fe && ops > be) return "devops";
   if (fe >= 2 && be >= 2) return "fullstack";
@@ -39,17 +44,17 @@ export function categorize(title: string, description: string): Category {
 }
 
 function groupCounts(skills: string[]): Record<SkillGroup, number> {
-  const c: Record<SkillGroup, number> = { frontend: 0, backend: 0, devops: 0, other: 0 };
+  const c: Record<SkillGroup, number> = { frontend: 0, backend: 0, devops: 0, data: 0, security: 0, other: 0 };
   for (const s of skills) c[skillGroup(s)]++;
   return c;
 }
 
-/** Which of your four resumes this job should get. */
+/** Which of your base resumes this job should get. */
 export function pickTrack(category: Category, jobSkills: string[]): Track {
-  if (category === "frontend" || category === "backend" || category === "devops" || category === "fullstack") {
-    return category;
-  }
+  if (category !== "sde" && category !== "other") return category;
   const c = groupCounts(jobSkills);
+  if (c.security >= 3 && c.security > c.frontend + c.backend) return "security";
+  if (c.data >= 3 && c.data > c.frontend + c.backend) return "data";
   if (c.devops > c.frontend && c.devops > c.backend) return "devops";
   if (c.frontend >= 2 && c.backend >= 2) return "fullstack";
   if (c.backend > c.frontend) return "backend";

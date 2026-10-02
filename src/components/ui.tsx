@@ -148,6 +148,8 @@ const CATEGORY_STYLE: Record<Category, string> = {
   frontend: "bg-cat-frontend/10 text-cat-frontend ring-cat-frontend/20",
   backend: "bg-cat-backend/10 text-cat-backend ring-cat-backend/20",
   devops: "bg-cat-devops/10 text-cat-devops ring-cat-devops/20",
+  data: "bg-cat-data/10 text-cat-data ring-cat-data/20",
+  security: "bg-cat-security/10 text-cat-security ring-cat-security/20",
   sde: "bg-cat-sde/10 text-cat-sde ring-cat-sde/20",
   other: TONE.neutral,
 };

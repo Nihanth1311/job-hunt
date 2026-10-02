@@ -52,7 +52,7 @@ export default async function ResumesPage() {
       <section className="mb-10">
         <h2 className="mb-1 text-lg font-semibold tracking-tight">Base resumes</h2>
         <p className="mb-4 text-sm text-muted">
-          When you tailor a resume for a job, Claude starts from the matching one, so a DevOps job starts from your DevOps resume.
+          When you tailor a resume for a job, Claude starts from the matching one, so a Data Scientist job starts from your Data Science resume. Make only the ones for roles you apply to.
         </p>
         <div className="grid gap-4 md:grid-cols-2">
           {TRACKS.map((t) => {

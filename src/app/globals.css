@@ -35,6 +35,8 @@
   --cat-frontend: #2f5d8a;
   --cat-backend: #3f6b4f;
   --cat-devops: #a16207;
+  --cat-data: #0f766e;
+  --cat-security: #7f1d1d;
   --cat-sde: #57534e;
 
   --shadow-sm: 0 1px 0 rgba(28, 25, 23, 0.04);
@@ -70,6 +72,8 @@
     --cat-frontend: #8db3db;
     --cat-backend: #93c29f;
     --cat-devops: #e0b252;
+    --cat-data: #6cc4b8;
+    --cat-security: #e59a8f;
     --cat-sde: #b9b1a8;
 
     --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.3);
@@ -103,6 +107,8 @@
   --cat-frontend: #8db3db;
   --cat-backend: #93c29f;
   --cat-devops: #e0b252;
+  --cat-data: #6cc4b8;
+  --cat-security: #e59a8f;
   --cat-sde: #b9b1a8;
 
   --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.3);
@@ -131,6 +137,8 @@
   --color-cat-frontend: var(--cat-frontend);
   --color-cat-backend: var(--cat-backend);
   --color-cat-devops: var(--cat-devops);
+  --color-cat-data: var(--cat-data);
+  --color-cat-security: var(--cat-security);
   --color-cat-sde: var(--cat-sde);
   --font-sans: var(--font-body);
   --font-display: var(--font-body);

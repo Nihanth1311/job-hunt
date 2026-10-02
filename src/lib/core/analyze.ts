@@ -69,6 +69,8 @@ export function profileSkills(profile: Profile): string[] {
     ...profile.skills.frontend,
     ...profile.skills.backend,
     ...profile.skills.devops,
+    ...(profile.skills.data ?? []),
+    ...(profile.skills.security ?? []),
     ...profile.skills.other,
   ]);
 }
@@ -184,7 +186,7 @@ export function judgeFit(x: {
   const exp = experienceLabel(x.experience);
 
   // Deal-breakers first.
-  if (x.category === "other") return { verdict: "no", reasons: ["Not a software development role"] };
+  if (x.category === "other") return { verdict: "no", reasons: ["Not a software, data or security role"] };
   if (isInternship(x.experience)) return { verdict: "no", reasons: ["Internship, not a full-time role"] };
   // "2027 Campus Hire", "University Graduate 2026": hiring from colleges, for students still studying.
   if (/\bcampus\b|\buniversity (hire|grad(uate)?)\b|\b20\d\d (batch|graduates?|grads?|campus)\b|\b(batch|graduates?|grads?) (of )?20\d\d\b/i.test(x.title)) {
