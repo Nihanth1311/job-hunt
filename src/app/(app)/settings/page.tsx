@@ -3,11 +3,13 @@ import { ApiKeysCard } from "@/components/api-keys-card";
 import { ClipSetup } from "@/components/clip-setup";
 import { CompaniesCard } from "@/components/companies-card";
 import { FetchButton } from "@/components/fetch-button";
+import { PushCard } from "@/components/push-card";
 import { RestoreBackup } from "@/components/restore-backup";
 import { SettingsForm } from "@/components/settings-form";
 import { Badge, buttonClass, Card, CardTitle, cx, Icon, PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
+import { getPushMode, getPushSubs, vapidPublicKey } from "@/lib/notify/push";
 import { telegramConfigured } from "@/lib/notify/telegram";
 import { careerSiteCounts, recentFetchRuns } from "@/lib/queries";
 import { getPreferences, getSecrets, getState, maskSecret } from "@/lib/settings";
@@ -36,13 +38,16 @@ function Status({ ok, children }: { ok: boolean; children: React.ReactNode }) {
 export default async function SettingsPage() {
   const user = await requireUser();
   const uid = user.id;
-  const [prefs, runs, jsearchQuota, health, inFeed, secrets] = await Promise.all([
+  const [prefs, runs, jsearchQuota, health, inFeed, secrets, pushKey, pushMode, pushSubs] = await Promise.all([
     getPreferences(uid),
     recentFetchRuns(uid, 12),
     getState<{ remaining: number; limit: number | null; at: string }>(uid, "jsearchQuota"),
     getCompanyHealth(),
     careerSiteCounts(uid),
     getSecrets(uid),
+    vapidPublicKey(),
+    getPushMode(uid),
+    getPushSubs(uid),
   ]);
   const companyRows = COMPANIES.map((co) => ({
     id: co.id,
@@ -66,6 +71,10 @@ export default async function SettingsPage() {
           }}
           quota={jsearchQuota ? { remaining: jsearchQuota.remaining, limit: jsearchQuota.limit ?? 200 } : null}
         />
+      </div>
+
+      <div className="mb-5">
+        <PushCard publicKey={pushKey} mode={pushMode} devices={pushSubs.map((s) => s.device)} />
       </div>
 
       <div className="mb-5">

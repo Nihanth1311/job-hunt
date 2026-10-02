@@ -6,6 +6,7 @@ import { salaryLabel } from "./core/classify";
 import { getDb, schema } from "./db";
 import type { Job } from "./db/schema";
 import { cleanupOldJobs, hoursAgo, insertJobs, jobId, seenAt, toNewJob } from "./jobs";
+import { notifyNewJobs } from "./notify/push";
 import { escapeHtml, sendTelegram, telegramConfigured, type TelegramKeys } from "./notify/telegram";
 import { getPreferences, getProfile, getSecrets, getState, GLOBAL, setState } from "./settings";
 import { SOURCES, type JobSource } from "./sources";
@@ -230,6 +231,8 @@ async function doFetch(userId: string, force: boolean, signal: AbortSignal): Pro
 
   if (!signal.aborted) await setState(userId, "lastFetchAt", startedAt.toISOString());
   await instantAlerts(secrets, newJobs, prefs.instantAlertScore).catch((e) => console.error("[alerts]", e));
+  // Phone notifications only for automatic fetches: after "Fetch now" you are already looking.
+  if (!force) await notifyNewJobs(userId, newJobs).catch((e) => console.error("[push]", e));
   return { startedAt: startedAt.toISOString(), inserted: newJobs.length, sources: results, cancelled: signal.aborted };
 }
 

@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   description: "Private job search dashboard",
   // Private site: never show up in search engines.
   robots: { index: false, follow: false, nocache: true },
+  // Opens full screen from the iPhone Home Screen (needed there for notifications).
+  appleWebApp: { capable: true, title: "Job Hunt", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

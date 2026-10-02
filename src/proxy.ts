@@ -4,7 +4,8 @@ import { NextResponse, type NextRequest } from "next/server";
 // in the app layout and in every action and API route (requireUser), so a removed person or
 // a forged cookie gets nowhere even though this check only looks for the cookie.
 const SESSION_COOKIE = "jh_session";
-const PUBLIC = [/^\/login$/, /^\/api\/auth\//, /^\/api\/cron\//];
+// The Home Screen manifest, icons and notification worker are fetched without the session cookie.
+const PUBLIC = [/^\/login$/, /^\/api\/auth\//, /^\/api\/cron\//, /^\/sw\.js$/, /^\/manifest\.webmanifest$/, /^\/app-icon\//, /^\/apple-icon/];
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
