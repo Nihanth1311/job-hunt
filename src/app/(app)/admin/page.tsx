@@ -4,14 +4,14 @@ import { PageHeader } from "@/components/ui";
 import { listPeople } from "@/lib/accounts";
 import { MAX_USERS, requireAdmin } from "@/lib/auth";
 
-export const metadata: Metadata = { title: "People" };
+export const metadata: Metadata = { title: "Access" };
 
 export default async function AdminPage() {
   const admin = await requireAdmin();
   const people = await listPeople();
   return (
     <>
-      <PageHeader title="People" subtitle={`Who can sign in with Google. Invite only, up to ${MAX_USERS} people.`} />
+      <PageHeader title="Access" subtitle={`Who can use Job Hunt, and who's using it. Up to ${MAX_USERS} people, Google sign-in only.`} />
       <PeopleManager
         me={admin.email}
         max={MAX_USERS}
