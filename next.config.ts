@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
   // Never bundle your local database into a build.
   outputFileTracingExcludes: { "*": ["./data/**"] },
   poweredByHeader: false,
+  experimental: {
+    // "Restore from a backup" uploads your whole export (jobs with full descriptions: ~15 MB
+    // and growing). Requests pass through the sign-in proxy, which caps bodies at 10 MB by default.
+    proxyClientMaxBodySize: "50mb",
+  },
   // Hide the floating "N" dev-tools button; build and runtime errors still show in development.
   devIndicators: false,
   async headers() {

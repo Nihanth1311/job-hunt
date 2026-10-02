@@ -87,9 +87,13 @@ export function Nav({ user }: { user: NavUser }) {
       </header>
       <nav
         aria-label="Sections"
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
+        className={cx(
+          "fixed inset-x-0 bottom-0 z-30 grid border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden",
+          // Admins get a 7th tab (People); labels shrink a little to fit.
+          links.length > 6 ? "grid-cols-7 [&_a]:text-[9.5px]" : "grid-cols-6",
+        )}
       >
-        {LINKS.map((l) => {
+        {links.map((l) => {
           const on = active(l.href);
           return (
             <Link
