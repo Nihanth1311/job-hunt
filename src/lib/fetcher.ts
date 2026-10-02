@@ -33,6 +33,8 @@ export interface FetchSummary {
   startedAt: string;
   inserted: number;
   sources: SourceResult[];
+  /** Stopped early with "Cancel"; jobs added before that are kept. */
+  cancelled?: boolean;
 }
 
 const POOL_HOURS = 3;
@@ -42,18 +44,42 @@ const POOL_MIN_MINUTES = 20;
 const g = globalThis as unknown as {
   __jobHuntPool?: Promise<SourceResult[]>;
   __jobHuntFetching?: Map<string, Promise<FetchSummary>>;
+  __jobHuntAbort?: Map<string, AbortController>;
 };
 g.__jobHuntFetching ??= new Map();
+g.__jobHuntAbort ??= new Map();
 
 /** Fetch for one person. Overlapping calls for the same person share one run. */
 export function runFetch(userId: string, opts: { force?: boolean } = {}): Promise<FetchSummary> {
   const running = g.__jobHuntFetching!;
   let run = running.get(userId);
   if (!run) {
-    run = doFetch(userId, opts.force ?? false).finally(() => running.delete(userId));
+    const stop = new AbortController();
+    g.__jobHuntAbort!.set(userId, stop);
+    run = doFetch(userId, opts.force ?? false, stop.signal).finally(() => {
+      running.delete(userId);
+      g.__jobHuntAbort!.delete(userId);
+    });
     running.set(userId, run);
   }
   return run;
+}
+
+/**
+ * "Cancel": stop this person's fetch at the next safe point (between steps, or by no longer
+ * waiting for a slow source). Jobs already saved stay. The shared company-careers check keeps
+ * running for everyone else; this person's feed picks it up next time.
+ */
+export function cancelFetch(userId: string): boolean {
+  const stop = g.__jobHuntAbort!.get(userId);
+  stop?.abort();
+  return Boolean(stop);
+}
+
+/** Wait for `work`, unless `signal` fires first (then resolve to null; the work carries on unwatched). */
+function unlessStopped<T>(work: Promise<T>, signal: AbortSignal): Promise<T | null> {
+  if (signal.aborted) return Promise.resolve(null);
+  return Promise.race([work, new Promise<null>((done) => signal.addEventListener("abort", () => done(null), { once: true }))]);
 }
 
 export const isFetching = (userId: string) => g.__jobHuntFetching!.has(userId);
@@ -151,29 +177,37 @@ export async function fillFromPool(userId: string): Promise<Job[]> {
 
 // ---------- 2 & 3. One person's fetch ----------
 
-async function doFetch(userId: string, force: boolean): Promise<FetchSummary> {
+async function doFetch(userId: string, force: boolean, signal: AbortSignal): Promise<FetchSummary> {
   const [profile, prefs, secrets] = await Promise.all([getProfile(userId), getPreferences(userId), getSecrets(userId)]);
   const startedAt = new Date();
   const results: SourceResult[] = [];
   const newJobs: Job[] = [];
 
   // Company careers sites: refresh the shared pool if due, then take this person's share.
-  const pool = await refreshPool(force);
   const shared = SOURCES.find((s) => s.scope === "shared")!;
-  const fromPool = await fillFromPool(userId);
-  newJobs.push(...fromPool);
-  const poolRun = pool.find((r) => r.id === shared.id);
-  results.push({
-    id: shared.id,
-    label: shared.label,
-    status: poolRun?.status === "error" ? "error" : "ok",
-    fetched: poolRun?.fetched ?? 0,
-    inserted: fromPool.length,
-    message: poolRun?.status === "error" ? poolRun.message : poolRun?.status === "skipped" ? "Shared list checked recently" : undefined,
-  });
+  const pool = await unlessStopped(refreshPool(force), signal);
+  if (pool && !signal.aborted) {
+    const fromPool = await fillFromPool(userId);
+    newJobs.push(...fromPool);
+    const poolRun = pool.find((r) => r.id === shared.id);
+    results.push({
+      id: shared.id,
+      label: shared.label,
+      status: poolRun?.status === "error" ? "error" : "ok",
+      fetched: poolRun?.fetched ?? 0,
+      inserted: fromPool.length,
+      message: poolRun?.status === "error" ? poolRun.message : poolRun?.status === "skipped" ? "Shared list checked recently" : undefined,
+    });
+  } else {
+    results.push({ id: shared.id, label: shared.label, status: "skipped", fetched: 0, inserted: 0, message: "Cancelled" });
+  }
 
   for (const source of SOURCES.filter((s) => s.scope === "user")) {
     const base = { id: source.id, label: source.label, fetched: 0, inserted: 0 };
+    if (signal.aborted) {
+      results.push({ ...base, status: "skipped", message: "Cancelled" });
+      continue;
+    }
     if (!source.configured(prefs, secrets)) {
       results.push({ ...base, status: "skipped", message: source.id === "jsearch" ? "Add your key in Settings" : "Not set up" });
       continue;
@@ -185,7 +219,8 @@ async function doFetch(userId: string, force: boolean): Promise<FetchSummary> {
     }
     results.push(
       await logged(userId, source, async () => {
-        const raw = await source.fetch(ctx);
+        const raw = await unlessStopped(source.fetch(ctx), signal);
+        if (!raw) throw new Error("Cancelled");
         const inserted = await insertJobs(userId, raw.map((r) => toNewJob(userId, r, profile, prefs)));
         newJobs.push(...inserted);
         return { fetched: raw.length, inserted: inserted.length };
@@ -193,9 +228,9 @@ async function doFetch(userId: string, force: boolean): Promise<FetchSummary> {
     );
   }
 
-  await setState(userId, "lastFetchAt", startedAt.toISOString());
+  if (!signal.aborted) await setState(userId, "lastFetchAt", startedAt.toISOString());
   await instantAlerts(secrets, newJobs, prefs.instantAlertScore).catch((e) => console.error("[alerts]", e));
-  return { startedAt: startedAt.toISOString(), inserted: newJobs.length, sources: results };
+  return { startedAt: startedAt.toISOString(), inserted: newJobs.length, sources: results, cancelled: signal.aborted };
 }
 
 /** Everyone who can sign in (for the scheduler). */

@@ -10,11 +10,19 @@ export function FetchButton({ variant = "secondary" }: { variant?: "primary" | "
   const [pending, start] = useTransition();
   const [result, setResult] = useState<FetchSummary | null>(null);
   const [error, setError] = useState("");
+  const [stopping, setStopping] = useState(false);
+
+  // A plain request, not a server action: actions queue behind the running fetch.
+  const cancel = () => {
+    setStopping(true);
+    fetch("/api/fetch/cancel", { method: "POST" }).catch(() => setStopping(false));
+  };
 
   const run = () =>
     start(async () => {
       setResult(null);
       setError("");
+      setStopping(false);
       try {
         setResult(await fetchJobsNow());
       } catch (e) {
@@ -24,7 +32,7 @@ export function FetchButton({ variant = "secondary" }: { variant?: "primary" | "
 
   const ran = result?.sources.filter((s) => s.status === "ok") ?? [];
   const checked = ran.reduce((n, s) => n + s.fetched, 0);
-  const failed = result?.sources.filter((s) => s.status === "error") ?? [];
+  const failed = result?.sources.filter((s) => s.status === "error" && s.message !== "Cancelled") ?? [];
   const notSetUp = result?.sources.filter((s) => s.status === "skipped" && s.message === "Not set up") ?? [];
   const noSearchSources = notSetUp.some((s) => s.id === "jsearch");
 
@@ -49,17 +57,26 @@ export function FetchButton({ variant = "secondary" }: { variant?: "primary" | "
           className="panel-raised fixed inset-x-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-50 md:bottom-4 rounded-xl p-4 text-sm sm:left-auto sm:right-6 sm:w-[26rem]"
         >
           {pending ? (
-            <p className="flex items-center gap-2">
-              <span className="size-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-              Checking ~90 company careers sites and your other sources… this can take a few minutes.
-            </p>
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 size-4 shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+              <p className="flex-1">
+                {stopping
+                  ? "Stopping… finishing the step it's on."
+                  : "Checking ~90 company careers sites and your other sources… this can take a few minutes."}
+              </p>
+              <Button size="sm" variant="ghost" className="-my-1 shrink-0" disabled={stopping} onClick={cancel}>
+                {stopping ? "Stopping…" : "Cancel"}
+              </Button>
+            </div>
           ) : (
             <>
               <div className="flex items-start justify-between gap-3">
                 <p className={cx("font-semibold", error || failed.length ? "text-bad" : result!.inserted ? "text-good" : "")}>
                   {error
                     ? "Fetch failed"
-                    : result!.inserted
+                    : result!.cancelled
+                      ? `Fetch cancelled${result!.inserted ? ` · ${result!.inserted} new job${result!.inserted === 1 ? "" : "s"} added before stopping` : ""}`
+                      : result!.inserted
                       ? `${result!.inserted} new job${result!.inserted === 1 ? "" : "s"} added`
                       : "No new jobs this time"}
                 </p>
