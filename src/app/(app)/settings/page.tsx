@@ -3,6 +3,7 @@ import { ApiKeysCard } from "@/components/api-keys-card";
 import { ClipSetup } from "@/components/clip-setup";
 import { CompaniesCard } from "@/components/companies-card";
 import { FetchButton } from "@/components/fetch-button";
+import { RestoreBackup } from "@/components/restore-backup";
 import { SettingsForm } from "@/components/settings-form";
 import { Badge, buttonClass, Card, CardTitle, cx, Icon, PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
@@ -142,6 +143,7 @@ export default async function SettingsPage() {
               <a href="/api/export" className={buttonClass("secondary", "sm")}>
                 <Icon name="download" className="size-3.5" /> Export my data (JSON)
               </a>
+              <RestoreBackup />
               {user.role === "admin" && (
                 <a href="/admin" className={buttonClass("secondary", "sm")}>
                   <Icon name="profile" className="size-3.5" /> Manage people

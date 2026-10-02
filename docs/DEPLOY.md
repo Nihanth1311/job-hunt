@@ -1,4 +1,4 @@
-# Putting Job Hunt HQ online for free
+# Putting Job Hunt online for free
 
 This puts the site on **your own** free server so it keeps fetching jobs and sending alerts while your laptop is off.
 
@@ -26,7 +26,7 @@ git branch -M main
 Create an **empty private** repository on github.com (your personal account), then:
 
 ```bash
-git remote add origin https://github.com/<your-username>/job-hunt-hq.git
+git remote add origin https://<your-username>@github.com/<your-username>/job-hunt.git
 git push -u origin main
 ```
 
@@ -64,9 +64,10 @@ sudo iptables -I INPUT 6 -p tcp --dport 80 -j ACCEPT
 sudo iptables -I INPUT 6 -p tcp --dport 443 -j ACCEPT
 sudo netfilter-persistent save
 
-# Your code (GitHub will ask for a personal access token as the password)
-git clone https://github.com/<your-username>/job-hunt-hq.git
-cd job-hunt-hq
+# Your code. It's a private repo: when asked for a password, paste a GitHub personal access token
+# (GitHub -> Settings -> Developer settings -> Fine-grained tokens, repo "job-hunt", Contents: Read-only).
+git clone https://<your-username>@github.com/<your-username>/job-hunt.git
+cd job-hunt
 cp .env.example .env
 nano .env
 ```
@@ -96,7 +97,7 @@ Open `https://myjobs.duckdns.org`. Caddy gets the HTTPS certificate automaticall
 mkdir -p ~/backups
 crontab -e
 # add this line: daily backup at 3 AM, keep 14 days
-0 3 * * * cd ~/job-hunt-hq && docker compose exec -T db pg_dump -U jobhunt jobhunt | gzip > ~/backups/jobhunt-$(date +\%F).sql.gz && find ~/backups -mtime +14 -delete
+0 3 * * * cd ~/job-hunt && docker compose exec -T db pg_dump -U jobhunt jobhunt | gzip > ~/backups/jobhunt-$(date +\%F).sql.gz && find ~/backups -mtime +14 -delete
 ```
 
 You can also download everything any time from **Settings → Export all data**.
@@ -104,14 +105,25 @@ You can also download everything any time from **Settings → Export all data**.
 ## 6. Updating
 
 ```bash
-cd ~/job-hunt-hq && git pull && docker compose up -d --build
+cd ~/job-hunt && git pull && docker compose up -d --build
 ```
 
 ---
 
-## Moving your laptop data to the server (optional)
+## Google sign-in on your domain
 
-On your laptop: **Settings → Export all data** gives you a JSON file of everything. The easiest move is to re-enter your profile and base resumes on the server; jobs refill on their own.
+In Google Cloud Console → **Credentials → your OAuth client**, add:
+- Authorised JavaScript origin: `https://myjobs.duckdns.org`
+- Authorised redirect URI: `https://myjobs.duckdns.org/api/auth/google/callback`
+
+and make sure the server's `.env` has `APP_URL=https://myjobs.duckdns.org`. Keep the localhost entries too, for your laptop.
+
+## Moving your laptop data to the server
+
+1. On your laptop: **Settings → Your account → Export my data**.
+2. On the server, sign in with Google as the admin, then **Settings → Your account → Restore from a backup** and pick that file.
+
+Your profile, master resume, base and tailored resumes, tracker and saved jobs come across. New jobs fill in from the company sites on their own.
 
 ## When you want to scale or pay for more
 

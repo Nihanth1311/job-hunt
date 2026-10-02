@@ -3,7 +3,9 @@ import { eq } from "drizzle-orm";
 import { requireUser } from "@/lib/auth";
 import { getDb, schema } from "@/lib/db";
 import { getJob } from "@/lib/queries";
-import { replaceJobDescription } from "@/lib/jobs";
+import { replaceJobDescription, rescoreAll } from "@/lib/jobs";
+import { getProfile, savePreferences, saveProfile } from "@/lib/settings";
+import { DEFAULT_PREFERENCES, DEFAULT_PROFILE, type Preferences, type Profile } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +38,17 @@ export async function POST(req: Request) {
   if (!Array.isArray(backup.jobs)) return Response.json({ error: "That isn't a Job Hunt export file." }, { status: 400 });
 
   const db = await getDb();
-  const added = { jobs: 0, descriptions: 0, applications: 0, applicationEvents: 0, resumeVersions: 0 };
+  const added = { profile: false, jobs: 0, descriptions: 0, applications: 0, applicationEvents: 0, resumeVersions: 0 };
+
+  // Profile and preferences: only into a fresh account (no master resume yet), so a restore never overwrites your edits.
+  const saved = Array.isArray(backup.settings) ? (backup.settings as { key?: string; value?: unknown }[]) : [];
+  const backupProfile = saved.find((x) => x.key === "profile")?.value as Partial<Profile> | undefined;
+  const backupPrefs = saved.find((x) => x.key === "preferences")?.value as Partial<Preferences> | undefined;
+  if (backupProfile && !(await getProfile(uid)).masterResume.trim()) {
+    await saveProfile(uid, { ...DEFAULT_PROFILE, ...backupProfile, skills: { ...DEFAULT_PROFILE.skills, ...backupProfile.skills } });
+    if (backupPrefs) await savePreferences(uid, { ...DEFAULT_PREFERENCES, ...backupPrefs });
+    added.profile = true;
+  }
 
   // Everything imported becomes yours, whatever the file says.
   const jobs = revive<typeof schema.jobs.$inferInsert>(backup.jobs).map((j) => ({ ...j, userId: uid }));
@@ -70,6 +82,8 @@ export async function POST(req: Request) {
   }));
   if (resumes.length) added.resumeVersions = (await db.insert(schema.resumeVersions).values(resumes).onConflictDoNothing().returning()).length;
 
+  // Score everything against the (possibly restored) profile.
+  await rescoreAll(uid);
   revalidatePath("/", "layout");
   return Response.json({ ok: true, added });
 }
