@@ -5,8 +5,8 @@ import { analyzeJob, dedupeKey, type RawJob } from "./core/analyze";
 import { cleanTitle, normalizeChars } from "./core/text";
 import { getDb, schema } from "./db";
 import type { Job, NewJob } from "./db/schema";
-import { OWNER_ID } from "./auth";
-import { getPreferences, getProfile } from "./settings";
+import { OWNER_ID } from "./auth/owner";
+import { getPreferences, getProfile, getState, setState } from "./settings";
 import type { Preferences, Profile } from "./types";
 
 /**
@@ -158,10 +158,42 @@ export async function rescoreAll(userId: string): Promise<number> {
   const db = await getDb();
   const [profile, prefs] = await Promise.all([getProfile(userId), getPreferences(userId)]);
   const all = await db.select().from(schema.jobs).where(eq(schema.jobs.userId, userId));
-  for (const j of all) {
-    await db.update(schema.jobs).set(reanalyze(j, profile, prefs)).where(eq(schema.jobs.id, j.id));
+  const rows = all.map((j) => ({ id: j.id, ...reanalyze(j, profile, prefs) }));
+  // 200 jobs per statement: one round trip per batch instead of one per job (the database may be far away).
+  const json = (v: unknown) => JSON.stringify(v);
+  for (let i = 0; i < rows.length; i += 200) {
+    const values = sql.join(
+      rows
+        .slice(i, i + 200)
+        .map(
+          (r) =>
+            sql`(${r.id}, ${r.category}, ${r.track}, ${r.expMin}::int, ${r.expMax}::int, ${r.expFit}::boolean, ${r.salaryMinLpa}::real, ${r.salaryMaxLpa}::real, ${r.salaryBucket}, ${r.mentionsCtc}::boolean, ${r.fit}, ${json(r.fitReasons)}::jsonb, ${r.score}::int, ${json(r.skills)}::jsonb, ${json(r.matchedSkills)}::jsonb, ${json(r.missingSkills)}::jsonb)`,
+        ),
+      sql`, `,
+    );
+    await db.execute(sql`
+      UPDATE ${schema.jobs} AS j SET
+        category = v.category, track = v.track, exp_min = v.exp_min, exp_max = v.exp_max, exp_fit = v.exp_fit,
+        salary_min_lpa = v.salary_min_lpa, salary_max_lpa = v.salary_max_lpa, salary_bucket = v.salary_bucket,
+        mentions_ctc = v.mentions_ctc, fit = v.fit, fit_reasons = v.fit_reasons, score = v.score,
+        skills = v.skills, matched_skills = v.matched_skills, missing_skills = v.missing_skills
+      FROM (VALUES ${values}) AS v(id, category, track, exp_min, exp_max, exp_fit, salary_min_lpa, salary_max_lpa,
+        salary_bucket, mentions_ctc, fit, fit_reasons, score, skills, matched_skills, missing_skills)
+      WHERE j.id = v.id AND j.user_id = ${userId}`);
   }
   return all.length;
+}
+
+/**
+ * Bump when the scoring or fit rules change: each person's feed is re-scored once, the next
+ * time they open the app (or at the next scheduled fetch), so old scores never linger.
+ */
+const SCORING_VERSION = 2;
+
+export async function ensureScored(userId: string): Promise<void> {
+  if ((await getState<number>(userId, "scoringVersion")) === SCORING_VERSION) return;
+  await rescoreAll(userId);
+  await setState(userId, "scoringVersion", SCORING_VERSION);
 }
 
 /** Swap in the full description you pasted (e.g. for an Adzuna preview) and re-match on it. */

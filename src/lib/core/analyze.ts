@@ -116,8 +116,9 @@ export function analyzeJob(
   const salaryScore = { meets: 1, possible: 0.8, unknown: 0.6, below: 0.1 }[bucket];
   const categoryScore = category === "other" ? 0.2 : 1;
   const raw = Math.round(100 * (0.55 * skillFit + 0.25 * expScore + 0.1 * salaryScore + 0.1 * categoryScore));
+  // No skills on the profile yet (e.g. someone who just signed up): nothing to match against, so 0.
   // A role you don't qualify for (too senior, internship) is never a strong match.
-  const score = expFit ? raw : Math.min(raw, 35);
+  const score = mine.size === 0 ? 0 : expFit ? raw : Math.min(raw, 35);
 
   const fit = judgeFit({
     title: input.title,

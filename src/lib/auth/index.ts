@@ -13,8 +13,8 @@ import { randomToken, sha256 } from "./crypto";
 
 export const SESSION_COOKIE = "jh_session";
 const SESSION_DAYS = 30;
-/** The first admin's id: everything created before accounts existed belongs to it. */
-export const OWNER_ID = "owner";
+export { OWNER_ID } from "./owner";
+import { OWNER_ID } from "./owner";
 export const MAX_USERS = Number(process.env.MAX_USERS || 15);
 
 export const secureCookies = () => process.env.NODE_ENV === "production" && process.env.INSECURE_COOKIES !== "1";

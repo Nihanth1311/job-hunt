@@ -1,5 +1,6 @@
 import "server-only";
 import { allUserIds, cleanup, maybeSendMorningDigest, runFetch } from "./fetcher";
+import { ensureScored } from "./jobs";
 import { getPreferences, getState } from "./settings";
 
 const TICK_MS = 10 * 60 * 1000;
@@ -9,6 +10,7 @@ const g = globalThis as unknown as { __jobHuntScheduler?: NodeJS.Timeout };
 export async function tick() {
   try {
     for (const userId of await allUserIds()) {
+      await ensureScored(userId);
       const prefs = await getPreferences(userId);
       const last = await getState<string>(userId, "lastFetchAt");
       const dueAt = last ? new Date(last).getTime() + prefs.fetchIntervalHours * 3_600_000 : 0;
