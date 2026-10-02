@@ -1,0 +1,28 @@
+name: Fetch jobs
+
+# Render's free server sleeps when nobody is using it, so its own timer can't run.
+# This wakes it every 3 hours and fetches jobs for everyone (and sends morning digests).
+# Needs two repository secrets: APP_URL and CRON_SECRET (Settings -> Secrets and variables -> Actions).
+on:
+  schedule:
+    # UTC. 04:00 UTC = 9:30 AM in India, right after the morning digest time.
+    - cron: "0 1,4,7,10,13,16,19,22 * * *"
+  workflow_dispatch: # "Run workflow" button, to fetch on demand
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Wake the app and fetch jobs
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Add APP_URL and CRON_SECRET in the repo's Settings -> Secrets and variables -> Actions." && exit 1
+          fi
+          # A sleeping server takes up to a minute to wake; the first fetch can take ~5 minutes.
+          curl --fail-with-body --silent --show-error --max-time 900 \
+            --retry 3 --retry-delay 45 --retry-all-errors \
+            -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/fetch"

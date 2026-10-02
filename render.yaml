@@ -1,0 +1,32 @@
+# Render Blueprint: New -> Blueprint -> pick this repo. Render builds the Dockerfile and asks
+# for the values marked "sync: false" (they never go in the repo).
+services:
+  - type: web
+    name: job-hunt
+    runtime: docker
+    plan: free
+    # Closest Render region to India. Create the Neon database in Singapore too.
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /login
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL # Neon connection string (the direct one, not "-pooler")
+        sync: false
+      - key: ADMIN_EMAIL # your Gmail
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: APP_URL # e.g. https://job-hunt-xxxx.onrender.com (no trailing slash)
+        sync: false
+      - key: SESSION_SECRET # signs sign-in state and encrypts saved API keys; never change it later
+        generateValue: true
+      - key: CRON_SECRET # copy this into the GitHub repo secrets too (see docs/DEPLOY-RENDER.md)
+        generateValue: true
+      # The free server sleeps when idle, so jobs are fetched by .github/workflows/fetch.yml instead.
+      - key: SCHEDULER
+        value: "off"
+      - key: MAX_USERS
+        value: "15"
