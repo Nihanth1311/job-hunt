@@ -6,7 +6,7 @@ import { salaryLabel } from "./core/classify";
 import { getDb, schema } from "./db";
 import type { Job } from "./db/schema";
 import { cleanupOldJobs, hoursAgo, insertJobs, jobId, seenAt, toNewJob } from "./jobs";
-import { notifyNewJobs } from "./notify/push";
+import { notifyFetchFailed, notifyNewJobs } from "./notify/push";
 import { escapeHtml, sendTelegram, telegramConfigured, type TelegramKeys } from "./notify/telegram";
 import { getPreferences, getProfile, getSecrets, getState, GLOBAL, setState } from "./settings";
 import { SOURCES, type JobSource } from "./sources";
@@ -62,8 +62,20 @@ export function runFetch(userId: string, opts: { force?: boolean } = {}): Promis
   let run = running.get(userId);
   if (!run) {
     const stop = new AbortController();
+    const manual = opts.force ?? false;
     g.__jobHuntAbort!.set(userId, stop);
-    run = doFetch(userId, opts.force ?? false, stop.signal).finally(() => {
+    run = (async () => {
+      // Remembered until it ends, so a fetch cut off by a server restart is noticed (unfinishedFetches).
+      if (manual) await setState(userId, "manualFetch", { startedAt: new Date().toISOString() });
+      try {
+        return await doFetch(userId, manual, stop.signal);
+      } catch (err) {
+        if (manual) await notifyFetchFailed(userId, "Something went wrong on the server.").catch(() => {});
+        throw err;
+      } finally {
+        if (manual) await setState(userId, "manualFetch", {}).catch(() => {});
+      }
+    })().finally(() => {
       running.delete(userId);
       g.__jobHuntAbort!.delete(userId);
     });
@@ -243,9 +255,29 @@ async function doFetch(userId: string, force: boolean, signal: AbortSignal): Pro
   }
   await instantAlerts(secrets, newJobs, prefs.instantAlertScore).catch((e) => console.error("[alerts]", e));
   // Phone notification to this person only: after every automatic fetch with new jobs, and when
-  // their own "Fetch now" finishes (they may have closed the app). Not after a cancelled fetch.
-  if (!signal.aborted) await notifyNewJobs(userId, newJobs, { manual: force }).catch((e) => console.error("[push]", e));
+  // their own "Fetch now" finishes or fails (they may have closed the app). Not after Cancel.
+  if (!signal.aborted) {
+    const tried = results.filter((r) => r.status !== "skipped");
+    const failed = tried.filter((r) => r.status === "error").map((r) => r.label);
+    const notify =
+      force && tried.length > 0 && failed.length === tried.length
+        ? notifyFetchFailed(userId, `Couldn't reach ${failed.join(", ")}.`)
+        : notifyNewJobs(userId, newJobs, { manual: force, failed });
+    await notify.catch((e) => console.error("[push]", e));
+  }
   return { startedAt: startedAt.toISOString(), inserted: newJobs.length, sources: results, cancelled: signal.aborted };
+}
+
+/**
+ * A "Fetch now" that never finished because the server stopped (a free server going to sleep,
+ * a restart or a deploy): tell that person, once. Called by the scheduler on each wake-up.
+ */
+export async function unfinishedFetches(userId: string): Promise<void> {
+  const started = await getState<{ startedAt?: string }>(userId, "manualFetch");
+  if (!started?.startedAt || g.__jobHuntFetching!.has(userId)) return;
+  if (Date.now() - new Date(started.startedAt).getTime() < 20 * 60_000) return;
+  await setState(userId, "manualFetch", {});
+  await notifyFetchFailed(userId, "Your fetch was cut off before it finished (the server restarted).");
 }
 
 /** Everyone who can sign in (for the scheduler). */

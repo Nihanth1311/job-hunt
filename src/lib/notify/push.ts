@@ -113,7 +113,7 @@ const isQuiet = () => {
  * Their own "Fetch now" (`manual`): always says it's finished, even with nothing new, at any hour.
  * Skipped jobs aren't mentioned.
  */
-export async function notifyNewJobs(userId: string, found: Job[], opts: { manual?: boolean } = {}): Promise<void> {
+export async function notifyNewJobs(userId: string, found: Job[], opts: { manual?: boolean; failed?: string[] } = {}): Promise<void> {
   if (!(await getPushSubs(userId)).length) return;
   const mode = await getPushMode(userId);
   const wanted = (j: Pick<Job, "fit">) => (mode === "ready" ? j.fit === "fit" : j.fit !== "no");
@@ -139,9 +139,12 @@ export async function notifyNewJobs(userId: string, found: Job[], opts: { manual
 
   const n = jobs.length;
   const ready = jobs.filter((j) => j.fit === "fit").length;
+  // Some sources failed but not all: say which, so a quiet result isn't mistaken for "nothing new".
+  const failedLine = opts.manual && opts.failed?.length ? `Couldn't reach ${opts.failed.join(", ")}.` : "";
   if (!n) {
     const what = mode === "ready" ? "jobs ready to apply" : "jobs worth a look";
-    await sendPush(userId, { title: "Fetch finished", body: `No new ${what} this time.`, url: "/jobs", tag: "new-jobs" });
+    const body = [`No new ${what} this time.`, failedLine].filter(Boolean).join("\n");
+    await sendPush(userId, { title: "Fetch finished", body, url: failedLine ? "/settings" : "/jobs", tag: "new-jobs" });
     return;
   }
   const count =
@@ -151,6 +154,12 @@ export async function notifyNewJobs(userId: string, found: Job[], opts: { manual
   const title = opts.manual ? `Fetch finished · ${count}` : count;
   const top = jobs.slice(0, 3).map((j) => `${j.title} · ${j.company}${j.score ? ` (${j.score}%)` : ""}`);
   if (n > 3) top.push(`+${n - 3} more`);
+  if (failedLine) top.push(failedLine);
   const url = n === 1 ? `/jobs/${jobs[0].id}` : ready ? "/jobs?sort=recent" : "/jobs?sort=recent&fit=check";
   await sendPush(userId, { title, body: top.join("\n"), url, tag: "new-jobs" });
+}
+
+/** Your own "Fetch now" didn't work. Opens Settings, where Recent fetches shows what failed. */
+export async function notifyFetchFailed(userId: string, reason: string): Promise<void> {
+  await sendPush(userId, { title: "Fetch failed", body: `${reason} Open the app and try again.`, url: "/settings", tag: "new-jobs" });
 }
