@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { adminEmails, devLoginAllowed, signInVerified, startSession } from "@/lib/auth";
 import { onFirstSignIn } from "@/lib/accounts";
+import { siteUrl } from "@/lib/auth/google";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +12,8 @@ export async function POST(req: NextRequest) {
   const asEmail = String((await req.formData().catch(() => null))?.get("email") ?? "").trim();
   const email = asEmail || adminEmails()[0];
   const result = await signInVerified({ email, name: "", image: null });
-  if (!result.ok) return NextResponse.redirect(new URL("/login?error=not-invited", req.url), 303);
+  if (!result.ok) return NextResponse.redirect(siteUrl(req, "/login?error=not-invited"), 303);
   await onFirstSignIn(result.user);
   await startSession(result.user.id);
-  return NextResponse.redirect(new URL("/", req.url), 303);
+  return NextResponse.redirect(siteUrl(req, "/"), 303);
 }

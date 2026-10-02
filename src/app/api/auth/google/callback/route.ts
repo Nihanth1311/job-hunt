@@ -1,13 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { signInVerified, startSession } from "@/lib/auth";
 import { unseal } from "@/lib/auth/crypto";
-import { callbackUrl, OAUTH_COOKIE, verifiedProfile, type Flow } from "@/lib/auth/google";
+import { callbackUrl, OAUTH_COOKIE, siteUrl, verifiedProfile, type Flow } from "@/lib/auth/google";
 import { onFirstSignIn } from "@/lib/accounts";
 
 export const dynamic = "force-dynamic";
 
 const toLogin = (req: NextRequest, error: string) => {
-  const res = NextResponse.redirect(new URL(`/login?error=${error}`, req.url));
+  const res = NextResponse.redirect(siteUrl(req, `/login?error=${error}`));
   res.cookies.delete(OAUTH_COOKIE);
   return res;
 };
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
   await onFirstSignIn(result.user);
   await startSession(result.user.id);
-  const res = NextResponse.redirect(new URL(flow.next, req.url));
+  const res = NextResponse.redirect(siteUrl(req, flow.next));
   res.cookies.delete(OAUTH_COOKIE);
   return res;
 }

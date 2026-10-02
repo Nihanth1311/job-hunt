@@ -11,10 +11,24 @@ const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const OAUTH_COOKIE = "jh_oauth";
 
+/**
+ * The site's public address. Behind a host like Render the server itself listens on an internal
+ * address (http://0.0.0.0:10000), so never build links from req.url: use APP_URL, or the
+ * address the browser actually asked for.
+ */
+export function siteOrigin(req: NextRequest): string {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto") ?? req.nextUrl.protocol.replace(":", "");
+  return host ? `${proto}://${host}` : req.nextUrl.origin;
+}
+
+/** An absolute link on this site, for redirects. */
+export const siteUrl = (req: NextRequest, path: string) => new URL(path, siteOrigin(req));
+
 /** Where Google sends people back. Set APP_URL when hosted (e.g. https://jobs.example.com). */
 export function callbackUrl(req: NextRequest): string {
-  const origin = (process.env.APP_URL || req.nextUrl.origin).replace(/\/$/, "");
-  return `${origin}/api/auth/google/callback`;
+  return `${siteOrigin(req)}/api/auth/google/callback`;
 }
 
 export function newFlow(next: string) {
