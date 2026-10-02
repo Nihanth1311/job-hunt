@@ -52,9 +52,42 @@ const g = globalThis as unknown as {
   __jobHuntPool?: Promise<SourceResult[]>;
   __jobHuntFetching?: Map<string, Promise<FetchSummary>>;
   __jobHuntAbort?: Map<string, AbortController>;
+  __jobHuntStarted?: Map<string, string>;
 };
 g.__jobHuntFetching ??= new Map();
 g.__jobHuntAbort ??= new Map();
+g.__jobHuntStarted ??= new Map();
+
+/** The outcome of someone's last "Fetch now", kept so the app can show it after they come back. */
+export interface ManualFetchResult {
+  startedAt: string;
+  finishedAt: string;
+  summary?: FetchSummary;
+  error?: string;
+}
+
+export interface FetchStatus {
+  /** Their fetch is running right now; when it started. */
+  running: string | null;
+  last: ManualFetchResult | null;
+}
+
+export async function fetchStatus(userId: string): Promise<FetchStatus> {
+  return {
+    running: g.__jobHuntFetching!.has(userId) ? (g.__jobHuntStarted!.get(userId) ?? null) : null,
+    last: (await getState<ManualFetchResult>(userId, "lastManualFetch")) ?? null,
+  };
+}
+
+/**
+ * "Fetch now", without anyone waiting on it: starts (or joins) this person's fetch and returns
+ * when it started. The phone may close the app; the result is saved and the app picks it up
+ * later with fetchStatus.
+ */
+export function startManualFetch(userId: string): string {
+  void runFetch(userId, { force: true }).catch(() => {});
+  return g.__jobHuntStarted!.get(userId)!;
+}
 
 /** Fetch for one person. Overlapping calls for the same person share one run. */
 export function runFetch(userId: string, opts: { force?: boolean } = {}): Promise<FetchSummary> {
@@ -63,14 +96,23 @@ export function runFetch(userId: string, opts: { force?: boolean } = {}): Promis
   if (!run) {
     const stop = new AbortController();
     const manual = opts.force ?? false;
+    const startedAt = new Date().toISOString();
     g.__jobHuntAbort!.set(userId, stop);
+    g.__jobHuntStarted!.set(userId, startedAt);
+    const done = (r: Omit<ManualFetchResult, "startedAt" | "finishedAt">) =>
+      setState(userId, "lastManualFetch", { startedAt, finishedAt: new Date().toISOString(), ...r }).catch(() => {});
     run = (async () => {
       // Remembered until it ends, so a fetch cut off by a server restart is noticed (unfinishedFetches).
-      if (manual) await setState(userId, "manualFetch", { startedAt: new Date().toISOString() });
+      if (manual) await setState(userId, "manualFetch", { startedAt });
       try {
-        return await doFetch(userId, manual, stop.signal);
+        const summary = await doFetch(userId, manual, stop.signal);
+        if (manual) await done({ summary });
+        return summary;
       } catch (err) {
-        if (manual) await notifyFetchFailed(userId, "Something went wrong on the server.").catch(() => {});
+        if (manual) {
+          await done({ error: "Something went wrong on the server. Try again." });
+          await notifyFetchFailed(userId, "Something went wrong on the server.").catch(() => {});
+        }
         throw err;
       } finally {
         if (manual) await setState(userId, "manualFetch", {}).catch(() => {});
@@ -78,6 +120,7 @@ export function runFetch(userId: string, opts: { force?: boolean } = {}): Promis
     })().finally(() => {
       running.delete(userId);
       g.__jobHuntAbort!.delete(userId);
+      g.__jobHuntStarted!.delete(userId);
     });
     running.set(userId, run);
   }
@@ -277,6 +320,11 @@ export async function unfinishedFetches(userId: string): Promise<void> {
   if (!started?.startedAt || g.__jobHuntFetching!.has(userId)) return;
   if (Date.now() - new Date(started.startedAt).getTime() < 20 * 60_000) return;
   await setState(userId, "manualFetch", {});
+  await setState(userId, "lastManualFetch", {
+    startedAt: started.startedAt,
+    finishedAt: new Date().toISOString(),
+    error: "It was cut off before it finished (the server restarted). Try again.",
+  });
   await notifyFetchFailed(userId, "Your fetch was cut off before it finished (the server restarted).");
 }
 

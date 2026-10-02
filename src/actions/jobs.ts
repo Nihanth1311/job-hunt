@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { trackJob, unsaveJob as untrack } from "@/lib/applications";
 import { requireUser } from "@/lib/auth";
 import { getDb, schema } from "@/lib/db";
-import { runFetch, type FetchSummary } from "@/lib/fetcher";
 import { getSecrets, getState } from "@/lib/settings";
 import { findOnGoogleJobs } from "@/lib/sources/jsearch";
 import { adzunaAdId } from "@/lib/core/capture";
@@ -52,13 +51,6 @@ export async function markApplied(id: string) {
   if (!job) return;
   await trackJob(uid, job, "applied");
   refreshAll();
-}
-
-export async function fetchJobsNow(): Promise<FetchSummary> {
-  const { id: uid } = await requireUser();
-  const summary = await runFetch(uid, { force: true });
-  refreshAll();
-  return summary;
 }
 
 export async function saveFullDescription(id: string, description: string): Promise<string | null> {

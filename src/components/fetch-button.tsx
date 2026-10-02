@@ -1,34 +1,120 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
-import { fetchJobsNow } from "@/actions/jobs";
-import type { FetchSummary } from "@/lib/fetcher";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { FetchStatus, FetchSummary } from "@/lib/fetcher";
 import { Button, Callout, cx, Icon } from "./ui";
 
+const POLL_MS = 3000;
+/** A finished fetch you haven't seen yet is shown when you come back within this long. */
+const SHOW_UNSEEN_MS = 15 * 60_000;
+const SEEN_KEY = "jh:fetchSeen";
+// Per device: which fetch result was already shown here. Storage can be unavailable; then it's just shown again.
+const readSeen = () => {
+  try {
+    return localStorage.getItem(SEEN_KEY);
+  } catch {
+    return null;
+  }
+};
+const markSeen = (startedAt: string) => {
+  try {
+    localStorage.setItem(SEEN_KEY, startedAt);
+  } catch {}
+};
+
+/**
+ * "Fetch now". The fetch runs on the server; this only starts it and then asks how it's going
+ * every few seconds. Nothing waits on a long request, so leaving the app (which cuts requests
+ * off on phones) can't make a good fetch look failed: on coming back it just asks again.
+ */
 export function FetchButton({ variant = "secondary" }: { variant?: "primary" | "secondary" }) {
-  const [pending, start] = useTransition();
+  const router = useRouter();
+  /** When the fetch we're showing started; null when none is running. */
+  const [running, setRunning] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
   const [result, setResult] = useState<FetchSummary | null>(null);
+  const [done, setDone] = useState(false);
   const [error, setError] = useState("");
   const [stopping, setStopping] = useState(false);
+  const since = useRef<string | null>(null);
+  const pending = starting || running !== null;
 
-  // A plain request, not a server action: actions queue behind the running fetch.
+  const check = useCallback(async () => {
+    let s: FetchStatus;
+    try {
+      const res = await fetch("/api/fetch", { cache: "no-store" });
+      if (!res.ok) return;
+      s = await res.json();
+    } catch {
+      return; // offline or the app was in the background: ask again on the next tick
+    }
+    if (s.running) {
+      since.current ??= s.running;
+      setRunning(s.running);
+      return;
+    }
+    // Nothing of ours running here. But a phone often reloads an app that was in the background:
+    // if your last fetch ended in the last few minutes and you haven't seen how, show it now.
+    if (!since.current) {
+      const l = s.last;
+      if (!l || Date.now() - new Date(l.finishedAt).getTime() > SHOW_UNSEEN_MS || readSeen() === l.startedAt) return;
+      since.current = l.startedAt;
+    }
+    const last = s.last && s.last.startedAt >= since.current ? s.last : null;
+    if (last) markSeen(last.startedAt);
+    since.current = null;
+    setRunning(null);
+    setStopping(false);
+    setResult(last?.summary ?? null);
+    setError(last?.error ?? "");
+    setDone(true);
+    router.refresh();
+  }, [router]);
+
+  // Opening the page (or coming back to the app) while a fetch is running shows it again.
+  useEffect(() => {
+    const first = setTimeout(() => void check(), 0);
+    const onShow = () => document.visibilityState === "visible" && void check();
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      clearTimeout(first);
+      document.removeEventListener("visibilitychange", onShow);
+    };
+  }, [check]);
+
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => void check(), POLL_MS);
+    return () => clearInterval(t);
+  }, [running, check]);
+
+  // A plain request, like the others here: nothing queues behind the running fetch.
   const cancel = () => {
     setStopping(true);
     fetch("/api/fetch/cancel", { method: "POST" }).catch(() => setStopping(false));
   };
 
-  const run = () =>
-    start(async () => {
-      setResult(null);
-      setError("");
-      setStopping(false);
-      try {
-        setResult(await fetchJobsNow());
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Fetch failed");
-      }
-    });
+  const run = async () => {
+    setResult(null);
+    setError("");
+    setDone(false);
+    setStopping(false);
+    setStarting(true);
+    try {
+      const res = await fetch("/api/fetch", { method: "POST" });
+      if (!res.ok) throw new Error();
+      const { startedAt } = (await res.json()) as { startedAt: string };
+      since.current = startedAt;
+      setRunning(startedAt);
+    } catch {
+      setError("Couldn't start the fetch. Check your connection and try again.");
+      setDone(true);
+    } finally {
+      setStarting(false);
+    }
+  };
 
   const ran = result?.sources.filter((s) => s.status === "ok") ?? [];
   const checked = ran.reduce((n, s) => n + s.fetched, 0);
@@ -51,7 +137,7 @@ export function FetchButton({ variant = "secondary" }: { variant?: "primary" | "
       </Button>
 
       {/* Fixed toast: never pushes the layout around or gets clipped on small screens. */}
-      {(pending || result || error) && (
+      {(pending || done) && (
         <div
           role="status"
           className="panel-raised fixed inset-x-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-50 md:bottom-4 rounded-xl p-4 text-sm sm:left-auto sm:right-6 sm:w-[26rem]"
@@ -71,10 +157,12 @@ export function FetchButton({ variant = "secondary" }: { variant?: "primary" | "
           ) : (
             <>
               <div className="flex items-start justify-between gap-3">
-                <p className={cx("font-semibold", error || failed.length ? "text-bad" : result!.inserted ? "text-good" : "")}>
+                <p className={cx("font-semibold", error || failed.length ? "text-bad" : result?.inserted ? "text-good" : "")}>
                   {error
                     ? "Fetch failed"
-                    : result!.cancelled
+                    : !result
+                      ? "Fetch finished"
+                      : result.cancelled
                       ? `Fetch cancelled${result!.inserted ? ` · ${result!.inserted} new job${result!.inserted === 1 ? "" : "s"} added before stopping` : ""}`
                       : result!.inserted
                       ? `${result!.inserted} new job${result!.inserted === 1 ? "" : "s"} added`
@@ -87,6 +175,7 @@ export function FetchButton({ variant = "secondary" }: { variant?: "primary" | "
                   onClick={() => {
                     setResult(null);
                     setError("");
+                    setDone(false);
                   }}
                 >
                   <Icon name="x" />
