@@ -87,8 +87,9 @@ export function PushCard({ publicKey, mode, devices }: { publicKey: string; mode
     <Card id="notifications" className="scroll-mt-6 p-5">
       <CardTitle icon="bell">Phone notifications</CardTitle>
       <p className="-mt-2 max-w-2xl text-sm text-muted">
-        A notification after each automatic fetch that finds new jobs for you (about every 3 hours). Nothing between 11 pm and 7 am:
-        overnight finds arrive with the first one in the morning.
+        Jobs are fetched for everyone automatically every 3 hours; you get a notification when yours finds new jobs (nothing between
+        11 pm and 7 am: overnight finds arrive with the first one in the morning). Press <b>Fetch now</b> and you can close the app:
+        you&apos;ll get a notification when it&apos;s done.
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

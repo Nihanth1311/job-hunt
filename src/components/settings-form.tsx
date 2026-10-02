@@ -106,16 +106,6 @@ export function SettingsForm({ prefs, telegramOn }: { prefs: Preferences; telegr
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label className="label" htmlFor="every">Check for new jobs every</label>
-            <select id="every" className="field" value={p.fetchIntervalHours} onChange={num("fetchIntervalHours")}>
-              {[1, 2, 3, 4, 6, 12, 24].map((h) => (
-                <option key={h} value={h}>
-                  {h} hour{h > 1 ? "s" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
             <label className="label" htmlFor="jq">Google Jobs searches per day</label>
             <input id="jq" type="number" min={0} max={10} className="field" value={p.jsearchQueriesPerDay} onChange={num("jsearchQueriesPerDay")} />
             <p className="mt-1 text-xs text-muted">Free plan: 200 a month. 5 a day ≈ 150.</p>

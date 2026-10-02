@@ -1,19 +1,27 @@
 import "server-only";
 import { allUserIds, cleanup, maybeSendMorningDigest, runFetch } from "./fetcher";
 import { ensureScored } from "./jobs";
-import { getPreferences, getState } from "./settings";
+import { getState } from "./settings";
 
 const TICK_MS = 10 * 60 * 1000;
 const g = globalThis as unknown as { __jobHuntScheduler?: NodeJS.Timeout };
 
-/** One pass for everyone: fetch for anyone who's due (the shared pool refreshes itself), then digests. */
+/** The automatic fetch: the same for everyone, every 3 hours. */
+export const AUTO_FETCH_HOURS = 3;
+/** The external cron is often a few minutes (sometimes half an hour) late; don't skip a round over that. */
+const SLACK_MS = 45 * 60_000;
+
+/**
+ * One pass for everyone: an automatic fetch for each person whose last automatic fetch was
+ * about 3 hours ago (the shared pool refreshes itself), then digests. "Fetch now" doesn't
+ * move this clock, so a manual fetch never costs anyone their next automatic one.
+ */
 export async function tick() {
   try {
     for (const userId of await allUserIds()) {
       await ensureScored(userId);
-      const prefs = await getPreferences(userId);
-      const last = await getState<string>(userId, "lastFetchAt");
-      const dueAt = last ? new Date(last).getTime() + prefs.fetchIntervalHours * 3_600_000 : 0;
+      const last = await getState<string>(userId, "lastAutoFetchAt");
+      const dueAt = last ? new Date(last).getTime() + AUTO_FETCH_HOURS * 3_600_000 - SLACK_MS : 0;
       if (Date.now() >= dueAt) {
         const s = await runFetch(userId);
         console.log(`[scheduler] ${userId}: ${s.inserted} new jobs`);

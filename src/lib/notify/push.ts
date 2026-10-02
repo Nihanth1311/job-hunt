@@ -108,24 +108,26 @@ const isQuiet = () => {
 };
 
 /**
- * After a scheduled fetch: "6 new jobs worth a look". Jobs found overnight are held and
- * included in the first notification of the morning. Skipped jobs aren't mentioned.
+ * After a fetch, to that person only. Automatic fetch: "6 new jobs worth a look", only when
+ * there's something new; found overnight → held for the first notification of the morning.
+ * Their own "Fetch now" (`manual`): always says it's finished, even with nothing new, at any hour.
+ * Skipped jobs aren't mentioned.
  */
-export async function notifyNewJobs(userId: string, found: Job[]): Promise<void> {
+export async function notifyNewJobs(userId: string, found: Job[], opts: { manual?: boolean } = {}): Promise<void> {
   if (!(await getPushSubs(userId)).length) return;
   const mode = await getPushMode(userId);
   const wanted = (j: Pick<Job, "fit">) => (mode === "ready" ? j.fit === "fit" : j.fit !== "no");
   const pending = (await getState<string[]>(userId, "pushPending")) ?? [];
   const ids = [...new Set([...pending, ...found.filter(wanted).map((j) => j.id)])];
-  if (!ids.length) return;
-  if (isQuiet()) {
+  if (!ids.length && !opts.manual) return;
+  if (isQuiet() && !opts.manual) {
     await setState(userId, "pushPending", ids.slice(-300));
     return;
   }
   await setState(userId, "pushPending", []);
 
   const db = await getDb();
-  const jobs = (
+  const jobs = !ids.length ? [] : (
     await db
       .select()
       .from(schema.jobs)
@@ -133,14 +135,20 @@ export async function notifyNewJobs(userId: string, found: Job[]): Promise<void>
   )
     .filter(wanted) // a held job may have been re-scored since
     .sort((a, b) => (a.fit === b.fit ? b.score - a.score : a.fit === "fit" ? -1 : 1));
-  if (!jobs.length) return;
+  if (!jobs.length && !opts.manual) return;
 
   const n = jobs.length;
   const ready = jobs.filter((j) => j.fit === "fit").length;
-  const title =
+  if (!n) {
+    const what = mode === "ready" ? "jobs ready to apply" : "jobs worth a look";
+    await sendPush(userId, { title: "Fetch finished", body: `No new ${what} this time.`, url: "/jobs", tag: "new-jobs" });
+    return;
+  }
+  const count =
     mode === "ready" || ready === n
       ? `${n} new job${n > 1 ? "s" : ""} ready to apply`
       : `${n} new job${n > 1 ? "s" : ""} worth a look${ready ? ` · ${ready} ready to apply` : ""}`;
+  const title = opts.manual ? `Fetch finished · ${count}` : count;
   const top = jobs.slice(0, 3).map((j) => `${j.title} · ${j.company}${j.score ? ` (${j.score}%)` : ""}`);
   if (n > 3) top.push(`+${n - 3} more`);
   const url = n === 1 ? `/jobs/${jobs[0].id}` : ready ? "/jobs?sort=recent" : "/jobs?sort=recent&fit=check";

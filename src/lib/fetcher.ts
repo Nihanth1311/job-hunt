@@ -229,10 +229,15 @@ async function doFetch(userId: string, force: boolean, signal: AbortSignal): Pro
     );
   }
 
-  if (!signal.aborted) await setState(userId, "lastFetchAt", startedAt.toISOString());
+  if (!signal.aborted) {
+    await setState(userId, "lastFetchAt", startedAt.toISOString());
+    // The automatic 3-hour clock (scheduler.ts) only moves on automatic fetches.
+    if (!force) await setState(userId, "lastAutoFetchAt", startedAt.toISOString());
+  }
   await instantAlerts(secrets, newJobs, prefs.instantAlertScore).catch((e) => console.error("[alerts]", e));
-  // Phone notifications only for automatic fetches: after "Fetch now" you are already looking.
-  if (!force) await notifyNewJobs(userId, newJobs).catch((e) => console.error("[push]", e));
+  // Phone notification to this person only: after every automatic fetch with new jobs, and when
+  // their own "Fetch now" finishes (they may have closed the app). Not after a cancelled fetch.
+  if (!signal.aborted) await notifyNewJobs(userId, newJobs, { manual: force }).catch((e) => console.error("[push]", e));
   return { startedAt: startedAt.toISOString(), inserted: newJobs.length, sources: results, cancelled: signal.aborted };
 }
 
