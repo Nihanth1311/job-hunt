@@ -1,5 +1,5 @@
 import "server-only";
-import { allUserIds, cleanup, earlyMs, maybeSendMorningDigest, runFetch, unfinishedFetches } from "./fetcher";
+import { allUserIds, cleanup, EARLY_MS, maybeSendMorningDigest, runFetch, unfinishedFetches } from "./fetcher";
 import { ensureScored } from "./jobs";
 import { getPreferences, getState, GLOBAL, setState } from "./settings";
 
@@ -37,7 +37,7 @@ async function doTick() {
       await unfinishedFetches(userId).catch((e) => console.error("[push]", userId, e));
       const hours = (await getPreferences(userId)).fetchIntervalHours;
       const last = await getState<string>(userId, "lastAutoFetchAt");
-      const dueAt = last ? new Date(last).getTime() + hours * 3_600_000 - earlyMs(hours) : 0;
+      const dueAt = last ? new Date(last).getTime() + hours * 3_600_000 - EARLY_MS : 0;
       if (Date.now() >= dueAt) {
         const s = await runFetch(userId);
         console.log(`[scheduler] ${userId}: ${s.inserted} new jobs`);

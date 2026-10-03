@@ -242,9 +242,9 @@ entry below. **Settings → Recent fetches** shows when each alarm clock last ar
 
 - **Answer first, work after** (`after()` in [cron route](../src/app/api/cron/fetch/route.ts)):
   GitHub bills by the minute it waits, so we reply in milliseconds and work in the background.
-- **Slack for late alarms**: GitHub's hourly runs are often minutes late. If you're due at 4:00
-  and it fires at 3:58 or 4:20, you still get your fetch (`earlyMs` in
-  [fetcher.ts](../src/lib/fetcher.ts)).
+- **Up to one check early**: the schedule is checked every 10 minutes, so a fetch counts as due
+  up to 10 minutes before its time (`EARLY_MS` in [fetcher.ts](../src/lib/fetcher.ts)). Every
+  3 hours means 3 hours, not 3 hours plus however long until the next check.
 - **"Fetch now" doesn't move your schedule**: automatic fetches track `lastAutoFetchAt`
   separately.
 
@@ -303,6 +303,14 @@ your laptop doesn't run fetches too.
 ## 11. Learning journal
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
+
+### "Every 3 hours" was really every 2 h 15 min
+**Problem:** Settings said "next: around 2:53 pm", but the fetch would have run at about
+2:08 pm. When GitHub's late hourly alarm was the only trigger, fetches were allowed up to
+45 minutes early so a late alarm couldn't push you past your slot. With a check every
+10 minutes, that allowance just made every interval shorter. **Fix:** allow one check (10 min).
+**Lesson:** a workaround is tied to the problem it worked around. When the cause goes away
+(an unreliable alarm), revisit the workaround, or it quietly becomes a bug.
 
 ### Automatic fetches missed for hours; no notification
 **Problem:** you were due an automatic fetch from about 02:40 UTC, but the next one ran at 06:23,

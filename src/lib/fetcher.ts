@@ -41,10 +41,11 @@ export interface FetchSummary {
 const POOL_HOURS = 3;
 
 /**
- * The wake-up comes from an hourly cron that is often a few minutes late. Count something as
- * due this much early, so a slightly-late hour never skips a round (15 min per hour, max 45).
+ * Something checks the schedule every 10 minutes (the server's own timer, kept awake by
+ * cron-job.org). Count a fetch as due up to one check early, so a 3-hour period means
+ * 3 hours, not 3 hours plus up to 10 minutes of waiting for the next check.
  */
-export const earlyMs = (hours: number) => Math.min(45, 15 * hours) * 60_000;
+export const EARLY_MS = 10 * 60_000;
 /** "Fetch now" refreshes the pool too, unless it was refreshed this recently. */
 const POOL_MIN_MINUTES = 20;
 
@@ -191,7 +192,7 @@ async function doRefreshPool(force: boolean, maxAgeHours: number): Promise<Sourc
   for (const source of SOURCES.filter((s) => s.scope === "shared")) {
     const last = await lastSuccess(GLOBAL, source.id);
     const age = last ? Date.now() - last.getTime() : Infinity;
-    if (age < (force ? POOL_MIN_MINUTES * 60_000 : maxAgeHours * 3_600_000 - earlyMs(maxAgeHours))) {
+    if (age < (force ? POOL_MIN_MINUTES * 60_000 : maxAgeHours * 3_600_000 - EARLY_MS)) {
       results.push({ id: source.id, label: source.label, status: "skipped", fetched: 0, inserted: 0, message: "Checked recently" });
       continue;
     }
