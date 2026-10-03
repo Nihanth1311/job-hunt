@@ -16,9 +16,11 @@ function authorized(request: Request): boolean {
 
 async function handle(request: Request) {
   if (!authorized(request)) return new Response("Unauthorized", { status: 401 });
+  // Who's calling (?from=github, ?from=cronjob), recorded so Settings shows which alarms arrive.
+  const from = (new URL(request.url).searchParams.get("from") ?? "cron").replace(/[^a-z0-9-]/gi, "").slice(0, 20) || "cron";
   // Answer at once and fetch in the background: the server stays awake while it works, and the
   // caller (GitHub Actions) isn't billed for minutes spent waiting.
-  after(() => tick());
+  after(() => tick(from));
   return Response.json({ ok: true, started: true }, { status: 202 });
 }
 

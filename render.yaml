@@ -25,8 +25,9 @@ services:
         generateValue: true
       - key: CRON_SECRET # copy this into the GitHub repo secrets too (see docs/DEPLOY-RENDER.md)
         generateValue: true
-      # The free server sleeps when idle, so jobs are fetched by .github/workflows/fetch.yml instead.
+      # While awake, the server also checks its own schedule every 10 minutes. It sleeps when idle,
+      # so external alarm clocks wake it too (.github/workflows/fetch.yml, cron-job.org).
       - key: SCHEDULER
-        value: "off"
+        value: "on"
       - key: MAX_USERS
         value: "15"

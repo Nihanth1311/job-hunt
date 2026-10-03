@@ -227,13 +227,18 @@ up.
 Render's free server **sleeps after 15 minutes** without visitors, so it can't run its own timer.
 
 ```
-GitHub Actions (every hour, .github/workflows/fetch.yml)
-   └─▶ GET /api/cron/fetch  (with a secret header)
-         └─▶ answers "202 started" at once, then in the background:
-               scheduler.tick(): for each person
-                 · is their "Check for new jobs every N hours" up?  → fetch → notify
-                 · morning digest due?                              → send
+Alarm clocks (any of them can wake the app; extra wake-ups are harmless)
+  · cron-job.org, every 30 min ─┐
+  · GitHub Actions, hourly     ─┼─▶ GET /api/cron/fetch?from=…  (with a secret header)
+  · the server's own timer,    ─┘     └─▶ answers "202 started" at once, then in the background:
+    every 10 min while awake                scheduler.tick(): for each person
+                                              · is their "Check for new jobs every N hours" up?
+                                                  → fetch → notify (every time, quiet at night)
+                                              · morning digest due? → send
 ```
+
+Why three? GitHub's scheduled runs are "best effort" and can be hours late. See the journal
+entry below. **Settings → Recent fetches** shows when each alarm clock last arrived.
 
 - **Answer first, work after** (`after()` in [cron route](../src/app/api/cron/fetch/route.ts)):
   GitHub bills by the minute it waits, so we reply in milliseconds and work in the background.
@@ -268,8 +273,9 @@ GitHub Actions (every hour, .github/workflows/fetch.yml)
 - **Why the Home Screen app?** Apple only allows web notifications for sites installed to the
   Home Screen. That needs a *web app manifest* ([manifest.ts](../src/app/manifest.ts)) and an
   icon, which is why the old bookmark didn't work and the new orange "JH" icon does.
-- **Rules**: automatic fetch → only if something new, quiet from 11 pm to 7 am (held for the
-  morning). Your own "Fetch now" → always tells you it finished or failed, and only you.
+- **Rules**: every automatic fetch → a notification, even "no new jobs", so you know it ran;
+  quiet from 11 pm to 7 am (jobs worth a look are held for the morning). Your own "Fetch now" →
+  always tells you it finished or failed, and only you.
 
 ---
 
@@ -297,6 +303,22 @@ your laptop doesn't run fetches too.
 ## 11. Learning journal
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
+
+### Automatic fetches missed for hours; no notification
+**Problem:** you were due an automatic fetch from about 02:40 UTC, but the next one ran at 06:23,
+and it sent no notification. **Investigation:** `fetch_runs` and the per-person
+`lastAutoFetchAt` showed the app fetched correctly *whenever it was woken*. GitHub's hourly
+alarm simply didn't arrive for ~5 hours: GitHub's scheduled workflows are "best effort" and get
+delayed or dropped when GitHub is busy. The silence had a second cause: that fetch found 0 new
+jobs, and the rule was "notify only when something's new".
+**Fix:** (1) more than one alarm clock: the server checks its own schedule every 10 minutes
+while awake (`SCHEDULER=on`), cron-job.org calls it reliably, and GitHub stays as a backup. Extra
+alarms are harmless because a person is only fetched when due (the scheduler is
+**idempotent**). (2) Every daytime automatic fetch now notifies, even with nothing new.
+(3) Settings shows when each alarm last arrived, so next time we can *see* instead of guess.
+**Lessons:** don't depend on a single unreliable trigger; design for redundancy. *Observability*
+(recording what happened) turns "it seems broken" into a five-second diagnosis. And when the
+spec says "notify after every fetch", don't quietly add "…if there's news".
 
 ### Fetch now: start, then check back
 **Problem:** on the phone, "Fetch now" sometimes said *failed*, but the server logs showed every

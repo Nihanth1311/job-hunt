@@ -55,8 +55,12 @@ export const getPushMode = async (userId: string) => (await getState<PushMode>(u
 export const setPushMode = (userId: string, mode: PushMode) => setState(userId, "pushMode", mode);
 
 export async function addPushSub(userId: string, sub: Omit<PushSub, "addedAt">): Promise<void> {
-  const others = (await getPushSubs(userId)).filter((s) => s.endpoint !== sub.endpoint);
-  await setState(userId, "pushSubs", [...others, { ...sub, addedAt: new Date().toISOString() }].slice(-MAX_DEVICES));
+  const subs = await getPushSubs(userId);
+  const same = subs.find((s) => s.endpoint === sub.endpoint);
+  // Already saved: the Settings page re-checks this device on every visit; don't rewrite it each time.
+  if (same && same.keys.p256dh === sub.keys.p256dh && same.keys.auth === sub.keys.auth) return;
+  const others = subs.filter((s) => s.endpoint !== sub.endpoint);
+  await setState(userId, "pushSubs", [...others, { ...sub, addedAt: same?.addedAt ?? new Date().toISOString() }].slice(-MAX_DEVICES));
 }
 
 export async function removePushSub(userId: string, endpoint: string): Promise<void> {
@@ -108,10 +112,12 @@ const isQuiet = () => {
 };
 
 /**
- * After a fetch, to that person only. Automatic fetch: "6 new jobs worth a look", only when
- * there's something new; found overnight → held for the first notification of the morning.
- * Their own "Fetch now" (`manual`): always says it's finished, even with nothing new, at any hour.
- * Skipped jobs aren't mentioned.
+ * After every fetch, to that person only.
+ *  - Automatic fetch: always, so you know it ran ("Automatic fetch · 3 new jobs worth a look",
+ *    "· no new jobs", "· 24 new jobs, none for you yet"). Except 11 pm-7 am: jobs worth a look found
+ *    then are held for the first notification of the morning, and nothing else is sent at night.
+ *  - Their own "Fetch now" (`manual`): always, at any hour.
+ * `failed`: sources that couldn't be reached this time, so a quiet result isn't mistaken for "nothing new".
  */
 export async function notifyNewJobs(userId: string, found: Job[], opts: { manual?: boolean; failed?: string[] } = {}): Promise<void> {
   if (!(await getPushSubs(userId)).length) return;
@@ -119,44 +125,52 @@ export async function notifyNewJobs(userId: string, found: Job[], opts: { manual
   const wanted = (j: Pick<Job, "fit">) => (mode === "ready" ? j.fit === "fit" : j.fit !== "no");
   const pending = (await getState<string[]>(userId, "pushPending")) ?? [];
   const ids = [...new Set([...pending, ...found.filter(wanted).map((j) => j.id)])];
-  if (!ids.length && !opts.manual) return;
   if (isQuiet() && !opts.manual) {
-    await setState(userId, "pushPending", ids.slice(-300));
+    if (ids.length) await setState(userId, "pushPending", ids.slice(-300));
     return;
   }
-  await setState(userId, "pushPending", []);
+  if (pending.length) await setState(userId, "pushPending", []);
 
   const db = await getDb();
-  const jobs = !ids.length ? [] : (
-    await db
-      .select()
-      .from(schema.jobs)
-      .where(and(eq(schema.jobs.userId, userId), inArray(schema.jobs.id, ids), eq(schema.jobs.status, "new")))
-  )
-    .filter(wanted) // a held job may have been re-scored since
-    .sort((a, b) => (a.fit === b.fit ? b.score - a.score : a.fit === "fit" ? -1 : 1));
-  if (!jobs.length && !opts.manual) return;
+  const jobs = !ids.length
+    ? []
+    : (
+        await db
+          .select()
+          .from(schema.jobs)
+          .where(and(eq(schema.jobs.userId, userId), inArray(schema.jobs.id, ids), eq(schema.jobs.status, "new")))
+      )
+        .filter(wanted) // a held job may have been re-scored since
+        .sort((a, b) => (a.fit === b.fit ? b.score - a.score : a.fit === "fit" ? -1 : 1));
 
+  const prefix = opts.manual ? "Fetch finished" : "Automatic fetch";
+  const failedLine = opts.failed?.length ? `Couldn't reach ${opts.failed.join(", ")}.` : "";
+  const plural = (k: number) => (k === 1 ? "" : "s");
   const n = jobs.length;
-  const ready = jobs.filter((j) => j.fit === "fit").length;
-  // Some sources failed but not all: say which, so a quiet result isn't mistaken for "nothing new".
-  const failedLine = opts.manual && opts.failed?.length ? `Couldn't reach ${opts.failed.join(", ")}.` : "";
+
   if (!n) {
-    const what = mode === "ready" ? "jobs ready to apply" : "jobs worth a look";
-    const body = [`No new ${what} this time.`, failedLine].filter(Boolean).join("\n");
-    await sendPush(userId, { title: "Fetch finished", body, url: failedLine ? "/settings" : "/jobs", tag: "new-jobs" });
+    const others = found.length; // new this time, but all ruled out for you
+    const title = others ? `${prefix} · ${others} new job${plural(others)}, none for you yet` : `${prefix} · no new jobs`;
+    const why = !others
+      ? "Nothing new since the last check."
+      : mode === "ready"
+        ? "None are ready to apply yet."
+        : "All were ruled out: too senior, not a tech role, or below your salary floor.";
+    const url = failedLine ? "/settings" : others ? "/jobs?sort=recent&fit=all" : "/jobs";
+    await sendPush(userId, { title, body: [why, failedLine].filter(Boolean).join("\n"), url, tag: "new-jobs" });
     return;
   }
+
+  const ready = jobs.filter((j) => j.fit === "fit").length;
   const count =
     mode === "ready" || ready === n
-      ? `${n} new job${n > 1 ? "s" : ""} ready to apply`
-      : `${n} new job${n > 1 ? "s" : ""} worth a look${ready ? ` · ${ready} ready to apply` : ""}`;
-  const title = opts.manual ? `Fetch finished · ${count}` : count;
-  const top = jobs.slice(0, 3).map((j) => `${j.title} · ${j.company}${j.score ? ` (${j.score}%)` : ""}`);
-  if (n > 3) top.push(`+${n - 3} more`);
-  if (failedLine) top.push(failedLine);
+      ? `${n} new job${plural(n)} ready to apply`
+      : `${n} new job${plural(n)} worth a look${ready ? ` · ${ready} ready to apply` : ""}`;
+  const lines = jobs.slice(0, 3).map((j) => `${j.title} · ${j.company}${j.score ? ` (${j.score}%)` : ""}`);
+  if (n > 3) lines.push(`+${n - 3} more`);
+  if (failedLine) lines.push(failedLine);
   const url = n === 1 ? `/jobs/${jobs[0].id}` : ready ? "/jobs?sort=recent" : "/jobs?sort=recent&fit=check";
-  await sendPush(userId, { title, body: top.join("\n"), url, tag: "new-jobs" });
+  await sendPush(userId, { title: `${prefix} · ${count}`, body: lines.join("\n"), url, tag: "new-jobs" });
 }
 
 /** Your own "Fetch now" didn't work. Opens Settings, where Recent fetches shows what failed. */

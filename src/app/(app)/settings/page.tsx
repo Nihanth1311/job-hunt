@@ -8,16 +8,25 @@ import { RestoreBackup } from "@/components/restore-backup";
 import { SettingsForm } from "@/components/settings-form";
 import { Badge, buttonClass, Card, CardTitle, cx, Icon, PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, timeAgo } from "@/lib/format";
 import { getPushMode, getPushSubs, vapidPublicKey } from "@/lib/notify/push";
 import { telegramConfigured } from "@/lib/notify/telegram";
 import { careerSiteCounts, recentFetchRuns } from "@/lib/queries";
+import { getWakeups } from "@/lib/scheduler";
 import { getPreferences, getSecrets, getState, maskSecret } from "@/lib/settings";
 import { SOURCES } from "@/lib/sources";
 import { getCompanyHealth } from "@/lib/sources/companies";
 import { COMPANIES, SECTORS } from "@/lib/sources/companies/registry";
 
 export const metadata: Metadata = { title: "Settings" };
+
+const ALARM_LABEL: Record<string, string> = {
+  github: "GitHub Actions",
+  cronjob: "cron-job.org",
+  timer: "Server's own timer",
+  startup: "Server start",
+  cron: "Other",
+};
 
 const SETUP: Record<string, string> = {
   jsearch: "Add your key in Your API keys",
@@ -38,7 +47,7 @@ function Status({ ok, children }: { ok: boolean; children: React.ReactNode }) {
 export default async function SettingsPage() {
   const user = await requireUser();
   const uid = user.id;
-  const [prefs, runs, jsearchQuota, health, inFeed, secrets, pushKey, pushMode, pushSubs] = await Promise.all([
+  const [prefs, runs, jsearchQuota, health, inFeed, secrets, pushKey, pushMode, pushSubs, lastAuto, wakeups] = await Promise.all([
     getPreferences(uid),
     recentFetchRuns(uid, 12),
     getState<{ remaining: number; limit: number | null; at: string }>(uid, "jsearchQuota"),
@@ -48,7 +57,10 @@ export default async function SettingsPage() {
     vapidPublicKey(),
     getPushMode(uid),
     getPushSubs(uid),
+    getState<string>(uid, "lastAutoFetchAt"),
+    getWakeups(),
   ]);
+  const nextAuto = lastAuto ? new Date(new Date(lastAuto).getTime() + prefs.fetchIntervalHours * 3_600_000) : null;
   const companyRows = COMPANIES.map((co) => ({
     id: co.id,
     name: co.name,
@@ -123,6 +135,31 @@ export default async function SettingsPage() {
 
           <Card className="p-5">
             <CardTitle icon="refresh">Recent fetches</CardTitle>
+            <p className="-mt-2 mb-3 text-xs text-muted">
+              Automatic fetch every {prefs.fetchIntervalHours} h.{" "}
+              {lastAuto ? (
+                <>
+                  Last: {formatDateTime(lastAuto)} · next: around {formatDateTime(nextAuto)}.
+                </>
+              ) : (
+                "The first one runs at the next check."
+              )}
+            </p>
+            {user.role === "admin" && Object.keys(wakeups).length > 0 && (
+              <div className="mb-3 rounded-lg bg-surface-2 p-3 text-xs">
+                <p className="mb-1 font-medium">Alarm clocks: last time each woke the app</p>
+                <ul className="space-y-0.5 text-muted">
+                  {Object.entries(wakeups)
+                    .sort((a, b) => b[1].localeCompare(a[1]))
+                    .map(([via, at]) => (
+                      <li key={via} className="flex justify-between gap-2">
+                        <span>{ALARM_LABEL[via] ?? via}</span>
+                        <span title={formatDateTime(at)}>{timeAgo(at)}</span>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
             {runs.length === 0 ? (
               <p className="text-sm text-muted">Nothing fetched yet. Press “Fetch now”.</p>
             ) : (

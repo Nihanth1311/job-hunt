@@ -27,4 +27,4 @@ jobs:
           # A sleeping server takes up to a minute to wake; then it answers straight away.
           curl --fail-with-body --silent --show-error --max-time 240 \
             --retry 3 --retry-delay 45 --retry-all-errors \
-            -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/fetch"
+            -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/fetch?from=github"
