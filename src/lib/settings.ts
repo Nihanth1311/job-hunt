@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 import { decrypt, encrypt } from "./auth/crypto";
 import { getDb, schema } from "./db";
+import { scheduleChanged } from "./core/schedule";
 import { DEFAULT_PREFERENCES, DEFAULT_PROFILE, type Preferences, type Profile } from "./types";
 
 // Every person's profile, preferences and state live under their user id.
@@ -37,7 +38,10 @@ export async function getPreferences(userId: string): Promise<Preferences> {
   return { ...DEFAULT_PREFERENCES, ...saved };
 }
 
-export const savePreferences = (userId: string, p: Preferences) => setValue(userId, "preferences", p);
+export async function savePreferences(userId: string, p: Preferences): Promise<void> {
+  await setValue(userId, "preferences", p);
+  scheduleChanged(); // the fetch period may have changed
+}
 
 /** Small bits of a person's state, e.g. when their morning digest was last sent. */
 export const getState = <T>(userId: string, key: string) => getValue<T>(userId, `state:${key}`);

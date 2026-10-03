@@ -1,4 +1,5 @@
 import "server-only";
+import { scheduleChanged } from "./core/schedule";
 import { asc, eq } from "drizzle-orm";
 import { ACTIVE_WITHIN_MS, MAX_USERS, OWNER_ID } from "./auth";
 import { getDb, schema } from "./db";
@@ -8,6 +9,7 @@ import { getProfile, getSecrets, saveProfile, setSecret } from "./settings";
 
 /** Right after someone signs in: fill gaps in their profile from Google and give them jobs from the shared pool. */
 export async function onFirstSignIn(user: User): Promise<void> {
+  scheduleChanged(); // maybe a new person: the scheduler should look at everyone again
   const profile = await getProfile(user.id);
   if (!profile.name || !profile.email) {
     await saveProfile(user.id, { ...profile, name: profile.name || user.name, email: profile.email || user.email });

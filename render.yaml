@@ -30,4 +30,4 @@ services:
       - key: SCHEDULER
         value: "on"
       - key: MAX_USERS
-        value: "15"
+        value: "20"

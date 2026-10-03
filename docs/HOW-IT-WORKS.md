@@ -242,9 +242,13 @@ entry below. **Settings → Recent fetches** shows when each alarm clock last ar
 
 - **Answer first, work after** (`after()` in [cron route](../src/app/api/cron/fetch/route.ts)):
   GitHub bills by the minute it waits, so we reply in milliseconds and work in the background.
-- **Up to one check early**: the schedule is checked every 10 minutes, so a fetch counts as due
-  up to 10 minutes before its time (`EARLY_MS` in [fetcher.ts](../src/lib/fetcher.ts)). Every
-  3 hours means 3 hours, not 3 hours plus however long until the next check.
+- **Fixed clock times**: "every 3 hours" means at 12, 3, 6 and 9 o'clock India time, for
+  everyone ([core/schedule.ts](../src/lib/core/schedule.ts)). Everyone on the same period is
+  fetched in one pass, and you know when to expect your notification.
+- **Most checks don't touch the database**: after a pass, the scheduler remembers when the next
+  fixed time is, and checks before then return immediately (it still looks once an hour, to
+  pick up changes). That matters because Neon's free plan counts the hours the database is
+  awake (100 a month) and only pauses it after 5 quiet minutes.
 - **"Fetch now" doesn't move your schedule**: automatic fetches track `lastAutoFetchAt`
   separately.
 
@@ -303,6 +307,17 @@ your laptop doesn't run fetches too.
 ## 11. Learning journal
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
+
+### Fixed fetch times, and a database that gets to sleep
+**Problem:** found while checking whether the app could handle 20 people. Neon's free plan
+gives **100 compute-hours a month** and pauses the database after 5 quiet minutes. The new
+10-minute checks read the database every time, so it would never pause: about 186 hours a
+month, and the app would stop when the allowance ran out. **Fix:** fetch at fixed clock times
+(every 3 hours means 12, 3, 6, 9), and remember the next one in memory so checks in between skip
+the database. **Lessons:** on free plans, *idle time is a resource*; something that runs "only
+every 10 minutes" can still cost 24 hours a day. Read the pricing page for *what is counted*,
+not just the headline limits. And grouping work into batches (everyone at 3 o'clock) is
+cheaper than spreading it out.
 
 ### "Every 3 hours" was really every 2 h 15 min
 **Problem:** Settings said "next: around 2:53 pm", but the fetch would have run at about

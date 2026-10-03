@@ -12,6 +12,7 @@ import { formatDateTime, timeAgo } from "@/lib/format";
 import { getPushMode, getPushSubs, vapidPublicKey } from "@/lib/notify/push";
 import { telegramConfigured } from "@/lib/notify/telegram";
 import { careerSiteCounts, recentFetchRuns } from "@/lib/queries";
+import { nextSlot, slotTimesLabel } from "@/lib/core/schedule";
 import { getWakeups } from "@/lib/scheduler";
 import { getPreferences, getSecrets, getState, maskSecret } from "@/lib/settings";
 import { SOURCES } from "@/lib/sources";
@@ -60,7 +61,7 @@ export default async function SettingsPage() {
     getState<string>(uid, "lastAutoFetchAt"),
     getWakeups(),
   ]);
-  const nextAuto = lastAuto ? new Date(new Date(lastAuto).getTime() + prefs.fetchIntervalHours * 3_600_000) : null;
+  const nextAuto = new Date(nextSlot(prefs.fetchIntervalHours));
   const companyRows = COMPANIES.map((co) => ({
     id: co.id,
     name: co.name,
@@ -136,14 +137,8 @@ export default async function SettingsPage() {
           <Card className="p-5">
             <CardTitle icon="refresh">Recent fetches</CardTitle>
             <p className="-mt-2 mb-3 text-xs text-muted">
-              Automatic fetch every {prefs.fetchIntervalHours} h.{" "}
-              {lastAuto ? (
-                <>
-                  Last: {formatDateTime(lastAuto)} · next: around {formatDateTime(nextAuto)}.
-                </>
-              ) : (
-                "The first one runs at the next check."
-              )}
+              Automatic fetch {slotTimesLabel(prefs.fetchIntervalHours)}, India time.{" "}
+              {lastAuto && <>Last: {formatDateTime(lastAuto)} · </>}next: {formatDateTime(nextAuto)} (within 10 minutes).
             </p>
             {user.role === "admin" && Object.keys(wakeups).length > 0 && (
               <div className="mb-3 rounded-lg bg-surface-2 p-3 text-xs">
