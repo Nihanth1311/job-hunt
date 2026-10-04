@@ -1,4 +1,5 @@
 import "server-only";
+import { telegramEnabled } from "../settings";
 
 // Free: create a bot with @BotFather, then message it once and read your chat id from
 // https://api.telegram.org/bot<TOKEN>/getUpdates  (see README).
@@ -18,6 +19,7 @@ export function escapeHtml(s: string): string {
 
 /** `html` may use Telegram's basic tags (<b>, <i>, <a href>); escape any user text with escapeHtml. */
 export async function sendTelegram(keys: TelegramKeys, html: string): Promise<void> {
+  if (!(await telegramEnabled())) throw new Error("Telegram alerts are turned off for everyone (Admin page).");
   if (!telegramConfigured(keys)) throw new Error("Add your Telegram bot token and chat id in Settings → Your API keys first.");
   const res = await fetch(`https://api.telegram.org/bot${keys.telegramBotToken}/sendMessage`, {
     method: "POST",

@@ -17,7 +17,7 @@ const commas = (s: string) =>
     .map((x) => x.trim())
     .filter(Boolean);
 
-export function SettingsForm({ prefs, telegramOn }: { prefs: Preferences; telegramOn: boolean }) {
+export function SettingsForm({ prefs, telegramOn, telegram }: { prefs: Preferences; telegramOn: boolean; telegram: boolean }) {
   const [p, setP] = useState(prefs);
   const [text, setText] = useState({
     locations: prefs.locations.join(", "),
@@ -124,41 +124,43 @@ export function SettingsForm({ prefs, telegramOn }: { prefs: Preferences; telegr
         </div>
       </Card>
 
-      <Card className="p-5">
-        <CardTitle icon="bell">Telegram alerts</CardTitle>
-        {!telegramOn && (
-          <p className="-mt-2 mb-3 text-xs text-muted">
-            Alerts go to your own Telegram bot. Add its token and your chat id in{" "}
-            <a href="#keys" className="font-medium text-accent hover:underline">
-              Your API keys
-            </a>{" "}
-            first.
-          </p>
-        )}
-        <label className="flex cursor-pointer items-center gap-2.5 rounded-xl bg-surface-2 px-3 py-2.5 text-sm">
-          <input type="checkbox" checked={p.morningDigest} onChange={(e) => setP((x) => ({ ...x, morningDigest: e.target.checked }))} />
-          Morning digest at 9 AM: new jobs by category, top matches, follow-ups due
-        </label>
-        <div className="mt-3 max-w-xs">
-          <label className="label" htmlFor="alert">Instant alert for new jobs scoring at least</label>
-          <select id="alert" className="field" value={p.instantAlertScore} onChange={num("instantAlertScore")}>
-            <option value={0}>Off</option>
-            {[60, 70, 75, 80, 85, 90].map((n) => (
-              <option key={n} value={n}>
-                {n}%
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" disabled={pending || !telegramOn} onClick={() => start(async () => setMsg(await sendTestNotification()))}>
-            Send test message
-          </Button>
-          <Button size="sm" disabled={pending || !telegramOn} onClick={() => start(async () => setMsg(await sendDigestNow()))}>
-            Send digest now
-          </Button>
-        </div>
-      </Card>
+      {telegram && (
+        <Card className="p-5">
+          <CardTitle icon="bell">Telegram alerts</CardTitle>
+          {!telegramOn && (
+            <p className="-mt-2 mb-3 text-xs text-muted">
+              Alerts go to your own Telegram bot. Add its token and your chat id in{" "}
+              <a href="#keys" className="font-medium text-accent hover:underline">
+                Your API keys
+              </a>{" "}
+              first.
+            </p>
+          )}
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl bg-surface-2 px-3 py-2.5 text-sm">
+            <input type="checkbox" checked={p.morningDigest} onChange={(e) => setP((x) => ({ ...x, morningDigest: e.target.checked }))} />
+            Morning digest at 9 AM: new jobs by category, top matches, follow-ups due
+          </label>
+          <div className="mt-3 max-w-xs">
+            <label className="label" htmlFor="alert">Instant alert for new jobs scoring at least</label>
+            <select id="alert" className="field" value={p.instantAlertScore} onChange={num("instantAlertScore")}>
+              <option value={0}>Off</option>
+              {[60, 70, 75, 80, 85, 90].map((n) => (
+                <option key={n} value={n}>
+                  {n}%
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" disabled={pending || !telegramOn} onClick={() => start(async () => setMsg(await sendTestNotification()))}>
+              Send test message
+            </Button>
+            <Button size="sm" disabled={pending || !telegramOn} onClick={() => start(async () => setMsg(await sendDigestNow()))}>
+              Send digest now
+            </Button>
+          </div>
+        </Card>
+      )}
 
       <div className="panel-raised sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-10 md:bottom-4 flex flex-wrap items-center gap-3 rounded-xl p-3">
         <Button variant="primary" onClick={save} disabled={pending}>

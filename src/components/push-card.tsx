@@ -5,6 +5,9 @@ import { savePushMode, subscribePush, testPush, unsubscribePush } from "@/action
 import type { PushLogEntry, PushMode } from "@/lib/notify/push";
 import { Button, Callout, Card, CardTitle, cx } from "./ui";
 
+/** "Recently sent" shows this many until you tap See more. */
+const SENT_SHOWN = 5;
+
 type State = "checking" | "unsupported" | "install" | "denied" | "off" | "on";
 
 function keyBytes(base64: string) {
@@ -41,6 +44,8 @@ export function PushCard({
   const [state, setState] = useState<State>("checking");
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [showAllSent, setShowAllSent] = useState(false);
+  const sent = showAllSent ? log : log.slice(0, SENT_SHOWN);
 
   useEffect(() => {
     let alive = true;
@@ -115,6 +120,7 @@ export function PushCard({
         </label>
         <button
           id="push-toggle"
+          aria-label="Notifications on this device"
           type="button"
           role="switch"
           aria-checked={state === "on"}
@@ -187,7 +193,7 @@ export function PushCard({
         <div className="mt-5">
           <p className="label">Recently sent</p>
           <ul className="mt-1 divide-y divide-line rounded-lg text-xs ring-1 ring-inset ring-line">
-            {log.map((e) => (
+            {sent.map((e) => (
               <li key={e.at} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2">
                 <span className="min-w-0 flex-1">
                   <span className="text-muted">{e.when}</span> · {e.title}
@@ -203,6 +209,15 @@ export function PushCard({
               </li>
             ))}
           </ul>
+          {log.length > SENT_SHOWN && (
+            <button
+              type="button"
+              className="mt-1.5 text-xs font-medium text-accent hover:underline"
+              onClick={() => setShowAllSent((v) => !v)}
+            >
+              {showAllSent ? "Show less" : `See more (${log.length - SENT_SHOWN} older)`}
+            </button>
+          )}
           <p className="mt-1 text-xs text-muted">If something is listed here but didn&apos;t appear on your phone, check its notification settings for Job Hunt.</p>
         </div>
       )}

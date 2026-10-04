@@ -8,7 +8,7 @@ import type { Job } from "./db/schema";
 import { cleanupOldJobs, hoursAgo, insertJobs, jobId, seenAt, toNewJob } from "./jobs";
 import { notifyFetchFailed, notifyNewJobs } from "./notify/push";
 import { escapeHtml, sendTelegram, telegramConfigured, type TelegramKeys } from "./notify/telegram";
-import { getPreferences, getProfile, getSecrets, getState, GLOBAL, setState } from "./settings";
+import { getPreferences, getProfile, getSecrets, getState, GLOBAL, setState, telegramEnabled } from "./settings";
 import { SOURCES, type JobSource } from "./sources";
 import { followedCompanies } from "./sources/companies";
 import { MAX_AGE_DAYS } from "./sources/companies/shared";
@@ -350,7 +350,7 @@ function jobLine(j: Job): string {
 }
 
 async function instantAlerts(keys: TelegramKeys, jobs: Job[], minScore: number) {
-  if (!minScore || !telegramConfigured(keys)) return;
+  if (!minScore || !telegramConfigured(keys) || !(await telegramEnabled())) return;
   const hits = jobs
     .filter((j) => j.fit === "fit" && j.score >= minScore)
     .sort((a, b) => b.score - a.score)
@@ -399,7 +399,7 @@ export async function sendMorningDigest(userId: string): Promise<void> {
 
 export async function maybeSendMorningDigest(userId: string): Promise<void> {
   const [prefs, keys] = await Promise.all([getPreferences(userId), getSecrets(userId)]);
-  if (!prefs.morningDigest || !telegramConfigured(keys)) return;
+  if (!prefs.morningDigest || !telegramConfigured(keys) || !(await telegramEnabled())) return;
   const ist = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
     year: "numeric",

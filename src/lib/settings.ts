@@ -47,6 +47,10 @@ export async function savePreferences(userId: string, p: Preferences): Promise<v
 export const getState = <T>(userId: string, key: string) => getValue<T>(userId, `state:${key}`);
 export const setState = (userId: string, key: string, value: unknown) => setValue(userId, `state:${key}`, value);
 
+/** The admin's switch for Telegram alerts, for everyone (Admin page). On unless turned off. */
+export const telegramEnabled = async () => (await getState<boolean>(GLOBAL, "telegramEnabled")) !== false;
+export const setTelegramEnabled = (on: boolean) => setState(GLOBAL, "telegramEnabled", on);
+
 // ---------- Each person's own API keys (encrypted) ----------
 
 export const SECRET_NAMES = ["jsearchKey", "telegramBotToken", "telegramChatId"] as const;

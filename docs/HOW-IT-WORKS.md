@@ -74,7 +74,7 @@ job-hunt-hq/
 │  │  ├─ (app)/             ← signed-in pages; (app) groups them under one layout
 │  │  │  ├─ page.tsx        ← "/"  Today
 │  │  │  ├─ jobs/           ← "/jobs" list and "/jobs/[id]" job page
-│  │  │  ├─ tracker/ resumes/ profile/ settings/ admin/ capture/
+│  │  │  ├─ tracker/ resumes/ profile/ settings/ admin/
 │  │  │  └─ layout.tsx      ← nav bar, sign-in check, re-scoring check
 │  │  ├─ login/             ← the only page you can see signed out
 │  │  ├─ api/               ← plain HTTP endpoints (sign-in, cron, fetch, export)
@@ -206,7 +206,7 @@ up.
 
 - **Sign-in** is Google OAuth (authorization code + PKCE) in
   [auth/google.ts](../src/lib/auth/google.ts). Google proves who you are; we never see a password.
-- **Invite-only**: an admin adds emails on the People page, so only those can get in. Maximum 15.
+- **Invite-only**: an admin adds emails on the Admin page, so only those can get in. Maximum 20.
 - **Sessions**: a random token in an `httpOnly` cookie, which JavaScript can't read, so a
   malicious script can't steal it. The database stores only its **SHA-256 hash**, so a leaked
   database can't be used to sign in.
@@ -307,6 +307,17 @@ your laptop doesn't run fetches too.
 ## 11. Learning journal
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
+
+### Admin page, a Telegram switch for everyone, and less clutter
+**What:** the People page is now **Admin**, with a "Features for everyone" card. Its Telegram
+switch is one app-wide setting (stored under the shared `""` user, like the job pool). Off
+hides every Telegram part of Settings *and* stops sending: the function that talks to Telegram
+checks the switch itself, so nothing slips through, even for people who saved keys before. The
+"Clip jobs from any website" bookmark is gone (it existed to fix Adzuna's cut-off descriptions;
+Adzuna is gone too), along with its page and helpers. "Recently sent" shows the last 5 with See more.
+**Lesson:** hide a feature in the UI for *people*, and block it at the one place it acts for
+*safety*; hiding alone leaves the old paths working. And delete code whose reason has gone:
+less code is less to read, test and break.
 
 ### Internship as its own role type
 **What:** an Internship chip next to Frontend, Backend, Data Science… Tech internships ("Frontend

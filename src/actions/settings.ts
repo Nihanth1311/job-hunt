@@ -6,7 +6,7 @@ import { requireAdmin, requireUser } from "@/lib/auth";
 import { fillFromPool, sendMorningDigest } from "@/lib/fetcher";
 import { rescoreAll } from "@/lib/jobs";
 import { sendTelegram } from "@/lib/notify/telegram";
-import { getPreferences, getSecrets, savePreferences, saveProfile, SECRET_NAMES, setSecret, type SecretName } from "@/lib/settings";
+import { getPreferences, getSecrets, savePreferences, saveProfile, SECRET_NAMES, setSecret, setTelegramEnabled, telegramEnabled, type SecretName } from "@/lib/settings";
 import type { Preferences, Profile } from "@/lib/types";
 
 const refreshAll = () => revalidatePath("/", "layout");
@@ -104,4 +104,12 @@ export async function removePersonAction(email: string, deleteData: boolean): Pr
   if (email.trim().toLowerCase() === admin.email) return;
   await removePerson(email, deleteData);
   revalidatePath("/admin");
+}
+
+/** Admin: show or hide Telegram alerts for everyone. Returns the saved state. */
+export async function setTelegramForEveryone(on: boolean): Promise<boolean> {
+  await requireAdmin();
+  await setTelegramEnabled(Boolean(on));
+  refreshAll();
+  return telegramEnabled();
 }

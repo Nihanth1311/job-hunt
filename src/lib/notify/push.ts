@@ -128,7 +128,7 @@ export interface PushLogEntry {
 export const getPushLog = async (userId: string) => (await getState<PushLogEntry[]>(userId, "pushLog")) ?? [];
 
 async function logPush(userId: string, entry: PushLogEntry) {
-  await setState(userId, "pushLog", [entry, ...(await getPushLog(userId))].slice(0, 12)).catch(() => {});
+  await setState(userId, "pushLog", [entry, ...(await getPushLog(userId))].slice(0, 20)).catch(() => {});
 }
 
 const istHour = () => (new Date().getUTCHours() + 5 + (new Date().getUTCMinutes() >= 30 ? 1 : 0)) % 24;

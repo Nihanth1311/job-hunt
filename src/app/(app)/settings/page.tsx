@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { ApiKeysCard } from "@/components/api-keys-card";
-import { ClipSetup } from "@/components/clip-setup";
 import { CompaniesCard } from "@/components/companies-card";
 import { FetchButton } from "@/components/fetch-button";
 import { PushCard } from "@/components/push-card";
@@ -14,7 +13,7 @@ import { telegramConfigured } from "@/lib/notify/telegram";
 import { careerSiteCounts, recentFetchRuns } from "@/lib/queries";
 import { nextSlot, slotTimesLabel } from "@/lib/core/schedule";
 import { getWakeups } from "@/lib/scheduler";
-import { getPreferences, getSecrets, getState, maskSecret } from "@/lib/settings";
+import { getPreferences, getSecrets, getState, maskSecret, telegramEnabled } from "@/lib/settings";
 import { SOURCES } from "@/lib/sources";
 import { getCompanyHealth } from "@/lib/sources/companies";
 import { COMPANIES, SECTORS } from "@/lib/sources/companies/registry";
@@ -48,7 +47,7 @@ function Status({ ok, children }: { ok: boolean; children: React.ReactNode }) {
 export default async function SettingsPage() {
   const user = await requireUser();
   const uid = user.id;
-  const [prefs, runs, jsearchQuota, health, inFeed, secrets, pushKey, pushMode, pushSubs, lastAuto, wakeups, pushLog] = await Promise.all([
+  const [prefs, runs, jsearchQuota, health, inFeed, secrets, pushKey, pushMode, pushSubs, lastAuto, wakeups, pushLog, telegramAllowed] = await Promise.all([
     getPreferences(uid),
     recentFetchRuns(uid, 12),
     getState<{ remaining: number; limit: number | null; at: string }>(uid, "jsearchQuota"),
@@ -61,6 +60,7 @@ export default async function SettingsPage() {
     getState<string>(uid, "lastAutoFetchAt"),
     getWakeups(),
     getPushLog(uid),
+    telegramEnabled(),
   ]);
   const nextAuto = new Date(nextSlot(prefs.fetchIntervalHours));
   const companyRows = COMPANIES.map((co) => ({
@@ -84,12 +84,13 @@ export default async function SettingsPage() {
             telegramChatId: secrets.telegramChatId ?? "",
           }}
           quota={jsearchQuota ? { remaining: jsearchQuota.remaining, limit: jsearchQuota.limit ?? 200 } : null}
+          telegram={telegramAllowed}
         />
       </div>
 
       <div className="mb-5">
         <PushCard publicKey={pushKey} mode={pushMode} devices={pushSubs.map((s) => s.device)} intervalHours={prefs.fetchIntervalHours}
-          log={pushLog.slice(0, 6).map((e) => ({ ...e, when: formatDateTime(e.at) }))}
+          log={pushLog.map((e) => ({ ...e, when: formatDateTime(e.at) }))}
         />
       </div>
 
@@ -97,12 +98,8 @@ export default async function SettingsPage() {
         <CompaniesCard companies={companyRows} skipped={prefs.skippedCompanies} sectors={SECTORS} />
       </div>
 
-      <div className="mb-5">
-        <ClipSetup />
-      </div>
-
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <SettingsForm prefs={prefs} telegramOn={telegramOn} />
+        <SettingsForm prefs={prefs} telegramOn={telegramOn} telegram={telegramAllowed} />
 
         <div className="space-y-5">
           <Card className="p-5">
@@ -127,13 +124,15 @@ export default async function SettingsPage() {
                   </li>
                 );
               })}
-              <li className="py-2.5 last:pb-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span>Telegram alerts</span>
-                  <Status ok={telegramOn}>{telegramOn ? "On" : "Off"}</Status>
-                </div>
-                {!telegramOn && <p className="mt-0.5 text-xs text-muted">Add your bot token and chat id in Your API keys</p>}
-              </li>
+              {telegramAllowed && (
+                <li className="py-2.5 last:pb-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Telegram alerts</span>
+                    <Status ok={telegramOn}>{telegramOn ? "On" : "Off"}</Status>
+                  </div>
+                  {!telegramOn && <p className="mt-0.5 text-xs text-muted">Add your bot token and chat id in Your API keys</p>}
+                </li>
+              )}
             </ul>
           </Card>
 
@@ -190,7 +189,7 @@ export default async function SettingsPage() {
               <RestoreBackup />
               {user.role === "admin" && (
                 <a href="/admin" className={buttonClass("secondary", "sm")}>
-                  <Icon name="people" className="size-3.5" /> People
+                  <Icon name="lock" className="size-3.5" /> Admin
                 </a>
               )}
               <form action="/api/auth/logout" method="post">

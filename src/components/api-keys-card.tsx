@@ -13,9 +13,12 @@ type Name = "jsearchKey" | "telegramBotToken" | "telegramChatId";
 export function ApiKeysCard({
   masked,
   quota,
+  telegram,
 }: {
   masked: Record<Name, string>;
   quota: { remaining: number; limit: number } | null;
+  /** Telegram alerts are switched on for everyone (Admin page). */
+  telegram: boolean;
 }) {
   const [draft, setDraft] = useState<Partial<Record<Name, string>>>({});
   const [msg, setMsg] = useState<string | null>(null);
@@ -36,7 +39,7 @@ export function ApiKeysCard({
         alerts, and never shown again in full.
       </p>
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-2">
+      <div className={telegram ? "mt-5 grid gap-6 lg:grid-cols-2" : "mt-5 grid max-w-xl gap-6"}>
         <section>
           <h3 className="text-sm font-semibold">Google Jobs (JSearch)</h3>
           <p className="mt-1 text-xs leading-relaxed text-muted">
@@ -67,27 +70,29 @@ export function ApiKeysCard({
           )}
         </section>
 
-        <section>
-          <h3 className="text-sm font-semibold">Telegram alerts</h3>
-          <p className="mt-1 text-xs leading-relaxed text-muted">
-            Optional. In Telegram, message <b>@BotFather</b> → <code>/newbot</code> and copy the token. Then send your bot any message
-            and open <code>api.telegram.org/bot&lt;token&gt;/getUpdates</code> to find your chat id.
-          </p>
-          <KeyField
-            label="Bot token"
-            saved={masked.telegramBotToken}
-            value={draft.telegramBotToken ?? ""}
-            onChange={(v) => setDraft((d) => ({ ...d, telegramBotToken: v }))}
-            onRemove={() => save({ telegramBotToken: "" })}
-          />
-          <KeyField
-            label="Chat id"
-            saved={masked.telegramChatId}
-            value={draft.telegramChatId ?? ""}
-            onChange={(v) => setDraft((d) => ({ ...d, telegramChatId: v }))}
-            onRemove={() => save({ telegramChatId: "" })}
-          />
-        </section>
+        {telegram && (
+          <section>
+            <h3 className="text-sm font-semibold">Telegram alerts</h3>
+            <p className="mt-1 text-xs leading-relaxed text-muted">
+              Optional. In Telegram, message <b>@BotFather</b> → <code>/newbot</code> and copy the token. Then send your bot any message
+              and open <code>api.telegram.org/bot&lt;token&gt;/getUpdates</code> to find your chat id.
+            </p>
+            <KeyField
+              label="Bot token"
+              saved={masked.telegramBotToken}
+              value={draft.telegramBotToken ?? ""}
+              onChange={(v) => setDraft((d) => ({ ...d, telegramBotToken: v }))}
+              onRemove={() => save({ telegramBotToken: "" })}
+            />
+            <KeyField
+              label="Chat id"
+              saved={masked.telegramChatId}
+              value={draft.telegramChatId ?? ""}
+              onChange={(v) => setDraft((d) => ({ ...d, telegramChatId: v }))}
+              onRemove={() => save({ telegramChatId: "" })}
+            />
+          </section>
+        )}
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">

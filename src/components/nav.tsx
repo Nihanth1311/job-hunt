@@ -25,7 +25,7 @@ export interface NavUser {
 
 export function Nav({ user }: { user: NavUser }) {
   const pathname = usePathname();
-  const links = user.admin ? [...LINKS, { href: "/admin", label: "People", icon: "people" as IconName }] : LINKS;
+  const links = user.admin ? [...LINKS, { href: "/admin", label: "Admin", icon: "lock" as IconName }] : LINKS;
   const active = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
   // "Jobs" returns to the list with the filters you last used.
   const jobsHref = useJobsHref();
@@ -89,7 +89,7 @@ export function Nav({ user }: { user: NavUser }) {
         aria-label="Sections"
         className={cx(
           "fixed inset-x-0 bottom-0 z-30 grid border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden",
-          // Admins get a 7th tab (People); labels shrink a little to fit.
+          // Admins get a 7th tab (Admin); labels shrink a little to fit.
           links.length > 6 ? "grid-cols-7 [&_a]:text-[9.5px]" : "grid-cols-6",
         )}
       >

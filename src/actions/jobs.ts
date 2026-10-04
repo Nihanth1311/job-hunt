@@ -1,16 +1,13 @@
 "use server";
 
-import { and, eq, like, or, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { trackJob, unsaveJob as untrack } from "@/lib/applications";
 import { requireUser } from "@/lib/auth";
 import { getDb, schema } from "@/lib/db";
 import { getSecrets, getState } from "@/lib/settings";
 import { findOnGoogleJobs } from "@/lib/sources/jsearch";
-import { adzunaAdId } from "@/lib/core/capture";
-import { cleanTitle, normKey } from "@/lib/core/text";
-import type { Job } from "@/lib/db/schema";
-import { jobId, replaceJobDescription, rescoreAll } from "@/lib/jobs";
+import { replaceJobDescription, rescoreAll } from "@/lib/jobs";
 import { getJob } from "@/lib/queries";
 
 const refreshAll = () => revalidatePath("/", "layout");
@@ -66,53 +63,6 @@ export async function rescoreJobs(): Promise<number> {
   const n = await rescoreAll(uid);
   refreshAll();
   return n;
-}
-
-export interface CapturedJobMatch {
-  id: string;
-  title: string;
-  company: string;
-  descriptionIsPreview: boolean;
-}
-
-/** Which job in your feed a clipped page is about: same Adzuna ad, same link, or same company + title. */
-export async function findCapturedJob(input: { url: string; title: string; company: string }): Promise<CapturedJobMatch | null> {
-  const { id: uid } = await requireUser();
-  const db = await getDb();
-  const pick = (j: Job | undefined | null) =>
-    j ? { id: j.id, title: j.title, company: j.company, descriptionIsPreview: j.descriptionIsPreview } : null;
-
-  const adId = adzunaAdId(input.url);
-  if (adId) {
-    const byAd = await getJob(uid, jobId(uid, "adzuna", adId));
-    if (byAd) return pick(byAd);
-  }
-
-  const bare = input.url.split(/[?#]/)[0];
-  if (bare) {
-    const [byUrl] = await db
-      .select()
-      .from(schema.jobs)
-      .where(
-        and(
-          eq(schema.jobs.userId, uid),
-          or(sql`split_part(${schema.jobs.url}, '?', 1) = ${bare}`, sql`split_part(${schema.jobs.companyUrl}, '?', 1) = ${bare}`),
-        ),
-      )
-      .limit(1);
-    if (byUrl) return pick(byUrl);
-  }
-
-  if (input.title && input.company) {
-    const prefix = `${normKey(input.company)}|${normKey(cleanTitle(input.title))}|`;
-    const [byName] = await db
-      .select()
-      .from(schema.jobs)
-      .where(and(eq(schema.jobs.userId, uid), like(schema.jobs.dedupeKey, `${prefix}%`)))
-      .limit(1);
-    if (byName) return pick(byName);
-  }
-  return null;
 }
 
 /** Searches kept back for the daily Google Jobs run, so one-off checks can't use them all. */
