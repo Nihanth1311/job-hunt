@@ -34,9 +34,8 @@ export async function testPush(): Promise<string> {
   const { id: uid } = await requireUser();
   const n = await sendPush(uid, {
     title: "Job Hunt notifications are on",
-    body: "You'll hear from me after each fetch that finds new jobs.",
+    body: "You'll get one after every automatic fetch, and when your own Fetch now finishes.",
     url: "/jobs",
-    tag: "test",
   });
   return n ? `Sent to ${n} device${n > 1 ? "s" : ""}.` : "No device got it. Turn notifications off and on again on your phone.";
 }

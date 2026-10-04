@@ -74,7 +74,10 @@ export interface PushMessage {
   body: string;
   /** Opened when the notification is tapped. */
   url: string;
-  /** A newer notification with the same tag replaces the older one instead of piling up. */
+  /**
+   * A newer notification with the same tag silently replaces an older one still in Notification
+   * Center: no banner, no sound. So fetch notifications have no tag: each one alerts.
+   */
   tag?: string;
 }
 
@@ -89,6 +92,7 @@ export async function sendPush(userId: string, msg: PushMessage): Promise<number
   };
   let sent = 0;
   const gone: string[] = [];
+  const problems: string[] = [];
   await Promise.all(
     subs.map(async (s) => {
       try {
@@ -97,12 +101,34 @@ export async function sendPush(userId: string, msg: PushMessage): Promise<number
       } catch (e) {
         // 404/410: the device unsubscribed or the app was removed from the Home Screen.
         if (e instanceof WebPushError && (e.statusCode === 404 || e.statusCode === 410)) gone.push(s.endpoint);
-        else console.error("[push]", userId, e instanceof WebPushError ? `${e.statusCode} ${e.body}` : e);
+        else {
+          const why = e instanceof WebPushError ? `${e.statusCode} ${e.body}`.trim() : String(e);
+          problems.push(`${s.device}: ${why}`.slice(0, 200));
+          console.error("[push]", userId, why);
+        }
       }
     }),
   );
   if (gone.length) await setState(userId, "pushSubs", subs.filter((s) => !gone.includes(s.endpoint)));
+  await logPush(userId, { at: new Date().toISOString(), title: msg.title, sent, of: subs.length, problems });
   return sent;
+}
+
+// ---------- What was sent (shown in Settings, so a missing notification can be traced) ----------
+
+export interface PushLogEntry {
+  at: string;
+  title: string;
+  /** Devices Apple/Google accepted it for, out of `of`. */
+  sent: number;
+  of: number;
+  problems: string[];
+}
+
+export const getPushLog = async (userId: string) => (await getState<PushLogEntry[]>(userId, "pushLog")) ?? [];
+
+async function logPush(userId: string, entry: PushLogEntry) {
+  await setState(userId, "pushLog", [entry, ...(await getPushLog(userId))].slice(0, 12)).catch(() => {});
 }
 
 const istHour = () => (new Date().getUTCHours() + 5 + (new Date().getUTCMinutes() >= 30 ? 1 : 0)) % 24;
@@ -157,7 +183,7 @@ export async function notifyNewJobs(userId: string, found: Job[], opts: { manual
         ? "None are ready to apply yet."
         : "All were ruled out: too senior, not a tech role, or below your salary floor.";
     const url = failedLine ? "/settings" : others ? "/jobs?sort=recent&fit=all" : "/jobs";
-    await sendPush(userId, { title, body: [why, failedLine].filter(Boolean).join("\n"), url, tag: "new-jobs" });
+    await sendPush(userId, { title, body: [why, failedLine].filter(Boolean).join("\n"), url });
     return;
   }
 
@@ -170,10 +196,10 @@ export async function notifyNewJobs(userId: string, found: Job[], opts: { manual
   if (n > 3) lines.push(`+${n - 3} more`);
   if (failedLine) lines.push(failedLine);
   const url = n === 1 ? `/jobs/${jobs[0].id}` : ready ? "/jobs?sort=recent" : "/jobs?sort=recent&fit=check";
-  await sendPush(userId, { title: `${prefix} · ${count}`, body: lines.join("\n"), url, tag: "new-jobs" });
+  await sendPush(userId, { title: `${prefix} · ${count}`, body: lines.join("\n"), url });
 }
 
 /** Your own "Fetch now" didn't work. Opens Settings, where Recent fetches shows what failed. */
 export async function notifyFetchFailed(userId: string, reason: string): Promise<void> {
-  await sendPush(userId, { title: "Fetch failed", body: `${reason} Open the app and try again.`, url: "/settings", tag: "new-jobs" });
+  await sendPush(userId, { title: "Fetch failed", body: `${reason} Open the app and try again.`, url: "/settings" });
 }

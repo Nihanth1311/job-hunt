@@ -308,6 +308,19 @@ your laptop doesn't run fetches too.
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
 
+### Fetches on time, but no notifications
+**Problem:** after the scheduling fix, every fetch ran on the hour, yet no notifications seemed
+to arrive. **Investigation, ruling things out one at a time:** fetches ran (`fetch_runs`); the
+phone was still registered; the signing keys hadn't changed; and a diagnostic push sent with
+the live keys got **201 Accepted** from Apple. So the sending side worked. **Likely cause:** every
+fetch notification carried the same `tag`. A notification with the same tag as one already in
+Notification Center *silently replaces it*: no banner, no sound. After the first one, every later
+one overwrote it quietly. **Fix:** no tag, so each notification alerts; and a "Recently sent" list
+in Settings that records every push and Apple's answer.
+**Lessons:** *divide the pipeline and test each stage* (did it run? was it sent? was it accepted?
+was it shown?). Read what an option really does: "tag" sounded like a harmless label. And log
+outcomes where you can see them, not only in server logs you can't reach.
+
 ### Fixed fetch times, and a database that gets to sleep
 **Problem:** found while checking whether the app could handle 20 people. Neon's free plan
 gives **100 compute-hours a month** and pauses the database after 5 quiet minutes. The new

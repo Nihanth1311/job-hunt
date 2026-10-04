@@ -9,7 +9,7 @@ import { SettingsForm } from "@/components/settings-form";
 import { Badge, buttonClass, Card, CardTitle, cx, Icon, PageHeader } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { formatDateTime, timeAgo } from "@/lib/format";
-import { getPushMode, getPushSubs, vapidPublicKey } from "@/lib/notify/push";
+import { getPushLog, getPushMode, getPushSubs, vapidPublicKey } from "@/lib/notify/push";
 import { telegramConfigured } from "@/lib/notify/telegram";
 import { careerSiteCounts, recentFetchRuns } from "@/lib/queries";
 import { nextSlot, slotTimesLabel } from "@/lib/core/schedule";
@@ -48,7 +48,7 @@ function Status({ ok, children }: { ok: boolean; children: React.ReactNode }) {
 export default async function SettingsPage() {
   const user = await requireUser();
   const uid = user.id;
-  const [prefs, runs, jsearchQuota, health, inFeed, secrets, pushKey, pushMode, pushSubs, lastAuto, wakeups] = await Promise.all([
+  const [prefs, runs, jsearchQuota, health, inFeed, secrets, pushKey, pushMode, pushSubs, lastAuto, wakeups, pushLog] = await Promise.all([
     getPreferences(uid),
     recentFetchRuns(uid, 12),
     getState<{ remaining: number; limit: number | null; at: string }>(uid, "jsearchQuota"),
@@ -60,6 +60,7 @@ export default async function SettingsPage() {
     getPushSubs(uid),
     getState<string>(uid, "lastAutoFetchAt"),
     getWakeups(),
+    getPushLog(uid),
   ]);
   const nextAuto = new Date(nextSlot(prefs.fetchIntervalHours));
   const companyRows = COMPANIES.map((co) => ({
@@ -87,7 +88,9 @@ export default async function SettingsPage() {
       </div>
 
       <div className="mb-5">
-        <PushCard publicKey={pushKey} mode={pushMode} devices={pushSubs.map((s) => s.device)} intervalHours={prefs.fetchIntervalHours} />
+        <PushCard publicKey={pushKey} mode={pushMode} devices={pushSubs.map((s) => s.device)} intervalHours={prefs.fetchIntervalHours}
+          log={pushLog.slice(0, 6).map((e) => ({ ...e, when: formatDateTime(e.at) }))}
+        />
       </div>
 
       <div className="mb-5">

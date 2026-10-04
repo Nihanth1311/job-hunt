@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { savePushMode, subscribePush, testPush, unsubscribePush } from "@/actions/push";
-import type { PushMode } from "@/lib/notify/push";
+import type { PushLogEntry, PushMode } from "@/lib/notify/push";
 import { Button, Callout, Card, CardTitle, cx } from "./ui";
 
 type State = "checking" | "unsupported" | "install" | "denied" | "off" | "on";
@@ -29,11 +29,14 @@ export function PushCard({
   mode,
   devices,
   intervalHours,
+  log,
 }: {
   publicKey: string;
   mode: PushMode;
   devices: string[];
   intervalHours: number;
+  /** Recent notifications the server sent, newest first. */
+  log: (PushLogEntry & { when: string })[];
 }) {
   const [state, setState] = useState<State>("checking");
   const [msg, setMsg] = useState<string | null>(null);
@@ -179,6 +182,30 @@ export function PushCard({
           ))}
         </div>
       </fieldset>
+
+      {log.length > 0 && (
+        <div className="mt-5">
+          <p className="label">Recently sent</p>
+          <ul className="mt-1 divide-y divide-line rounded-lg text-xs ring-1 ring-inset ring-line">
+            {log.map((e) => (
+              <li key={e.at} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2">
+                <span className="min-w-0 flex-1">
+                  <span className="text-muted">{e.when}</span> · {e.title}
+                </span>
+                <span className={cx("shrink-0", e.sent === e.of ? "text-good" : "text-bad")}>
+                  {e.sent === e.of ? `handed to Apple/Google (${e.sent})` : `${e.sent} of ${e.of} delivered`}
+                </span>
+                {e.problems.map((p) => (
+                  <span key={p} className="w-full text-bad">
+                    {p}
+                  </span>
+                ))}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-muted">If something is listed here but didn&apos;t appear on your phone, check its notification settings for Job Hunt.</p>
+        </div>
+      )}
 
       {devices.length > 0 && (
         <p className="mt-4 text-xs text-muted">
