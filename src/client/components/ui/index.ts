@@ -9,3 +9,4 @@ export { CategoryBadge, SalaryBadge, ScorePill, TrackBadge } from "./job-badges"
 export { Stat } from "./stat";
 export { ArrowLink } from "./links";
 export { Segmented, segmentClass } from "./segmented";
+export { Spinner } from "./spinner";

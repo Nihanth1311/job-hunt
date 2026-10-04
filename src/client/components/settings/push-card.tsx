@@ -3,7 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { savePushMode, subscribePush, testPush, unsubscribePush } from "@/server/actions/push";
 import type { PushLogEntry, PushMode } from "@/shared/types";
-import { Button, Callout, Card, CardTitle, cx } from "../ui";
+import { useBusyWhile } from "../feedback/progress-bar";
+import { Button, Callout, Card, CardTitle, cx, Spinner } from "../ui";
 
 /** "Recently sent" shows this many until you tap See more. */
 const SENT_SHOWN = 5;
@@ -44,6 +45,7 @@ export function PushCard({
   const [state, setState] = useState<State>("checking");
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  useBusyWhile(pending); // the progress bar while it saves
   const [showAllSent, setShowAllSent] = useState(false);
   const sent = showAllSent ? log : log.slice(0, SENT_SHOWN);
 
@@ -133,10 +135,12 @@ export function PushCard({
         >
           <span
             className={cx(
-              "inline-block size-5 rounded-full bg-surface-solid shadow transition-transform",
+              "grid size-5 place-items-center rounded-full bg-surface-solid shadow transition-transform",
               state === "on" ? "translate-x-6" : "translate-x-1",
             )}
-          />
+          >
+            {pending && <Spinner className="size-3 border-[1.5px] text-accent" />}
+          </span>
         </button>
       </div>
       {state === "on" && (

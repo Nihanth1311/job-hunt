@@ -90,6 +90,7 @@ job-hunt-hq/
 │  │  └─ components/
 │  │     ├─ ui/               ← building blocks, one per file: button, card, badge, icon…
 │  │     ├─ layout/           ← nav bar, avatar, theme switch
+│  │     ├─ feedback/         ← the progress bar shown while a switch saves
 │  │     ├─ jobs/ resumes/ tracker/ settings/ profile/ admin/   ← each screen's parts
 │  │
 │  ├─ server/                 ← BACKEND: only ever runs on the server
@@ -343,6 +344,16 @@ your laptop doesn't run fetches too.
 ## 11. Learning journal
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
+
+### A progress bar for the switches
+**Problem:** flipping a switch (Telegram alerts on Admin, Notifications in Settings) waited on the
+server with no sign that anything was happening. **Fix:** a thin bar runs across the top of the
+screen and a small spinner turns inside the knob while it saves; the switch can't be pressed twice.
+The bar lives in [feedback/progress-bar.tsx](../src/client/components/feedback/progress-bar.tsx);
+a component turns it on with `useBusyWhile(pending)`. It waits 150 ms before showing, so quick
+saves don't flicker. **Tested** in a headless browser with a slowed network, both directions.
+**Lesson:** start small. A broader version (messages and loading screens everywhere) was tried
+and taken out; the part that was clearly needed came back on its own.
 
 ### Frontend, backend and shared: a clear folder structure
 **What:** everything outside `app/` moved into three layers: `client/` (what you see),

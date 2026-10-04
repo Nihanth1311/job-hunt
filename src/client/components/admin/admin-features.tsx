@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { setTelegramForEveryone } from "@/server/actions/settings";
-import { Card, CardTitle, cx } from "../ui";
+import { useBusyWhile } from "../feedback/progress-bar";
+import { Card, CardTitle, cx, Spinner } from "../ui";
 
 /** App-wide switches only the admin can flip. */
 export function AdminFeatures({ telegram }: { telegram: boolean }) {
   const [on, setOn] = useState(telegram);
   const [pending, start] = useTransition();
+  useBusyWhile(pending); // the progress bar while it saves
 
   const flip = () => {
     const next = !on;
@@ -41,8 +43,13 @@ export function AdminFeatures({ telegram }: { telegram: boolean }) {
           )}
         >
           <span
-            className={cx("inline-block size-5 rounded-full bg-surface-solid shadow transition-transform", on ? "translate-x-6" : "translate-x-1")}
-          />
+            className={cx(
+              "grid size-5 place-items-center rounded-full bg-surface-solid shadow transition-transform",
+              on ? "translate-x-6" : "translate-x-1",
+            )}
+          >
+            {pending && <Spinner className="size-3 border-[1.5px] text-accent" />}
+          </span>
         </button>
       </div>
       <p className="mt-2 text-xs text-muted">
