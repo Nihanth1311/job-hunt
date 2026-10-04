@@ -183,7 +183,7 @@ export default async function JobsPage({ searchParams }: PageProps<"/jobs">) {
                 <FilterOption
                   key={c}
                   group="category"
-                  to={href(f, { category: c })}
+                  to={href(f, c === "internship" ? { category: c, fit: "all" } : { category: c })}
                   active={f.category === c}
                   label={c === "other" ? "Non-tech / other" : CATEGORY_LABEL[c]}
                   count={counts[c] ?? 0}

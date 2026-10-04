@@ -145,7 +145,7 @@ export default async function TodayPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {CATEGORIES.filter((c) => c !== "other").map((c) => (
+                  {CATEGORIES.filter((c) => c !== "other" && c !== "internship").map((c) => (
                     <tr key={c}>
                       <td className="py-2.5">
                         <CategoryBadge category={c} />

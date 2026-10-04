@@ -151,6 +151,7 @@ const CATEGORY_STYLE: Record<Category, string> = {
   data: "bg-cat-data/10 text-cat-data ring-cat-data/20",
   security: "bg-cat-security/10 text-cat-security ring-cat-security/20",
   sde: "bg-cat-sde/10 text-cat-sde ring-cat-sde/20",
+  internship: "bg-cat-intern/10 text-cat-intern ring-cat-intern/20",
   other: TONE.neutral,
 };
 

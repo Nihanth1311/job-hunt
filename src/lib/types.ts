@@ -20,7 +20,7 @@ export const TRACK_TITLE: Record<Track, string> = {
   security: "Cybersecurity Engineer",
 };
 
-export const CATEGORIES = ["fullstack", "frontend", "backend", "devops", "data", "security", "sde", "other"] as const;
+export const CATEGORIES = ["fullstack", "frontend", "backend", "devops", "data", "security", "sde", "internship", "other"] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 export const CATEGORY_LABEL: Record<Category, string> = {
@@ -31,6 +31,7 @@ export const CATEGORY_LABEL: Record<Category, string> = {
   data: "Data Science",
   security: "Cybersecurity",
   sde: "SDE",
+  internship: "Internship",
   other: "Other",
 };
 

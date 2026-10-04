@@ -89,10 +89,13 @@ export function analyzeJob(
 ): Analysis {
   const text = `${input.title}\n${input.description}`;
   const skills = extractSkills(text);
-  const category = categorize(input.title, input.description);
-  const track = pickTrack(category, skills);
   const parsed = parseExperience(input.title, input.description);
   const experience = withSourceExperience(parsed, input.requiredExpMonths);
+  // Tech internships get their own category ("Frontend Intern" → Internship); the role type
+  // still picks which base resume fits. Non-tech internships stay "other".
+  const roleCategory = categorize(input.title, input.description);
+  const category: Category = roleCategory !== "other" && isInternship(experience) ? "internship" : roleCategory;
+  const track = pickTrack(roleCategory, skills);
   // Where the experience figure came from: written in the posting, guessed from the title, or reported by the source.
   const expSource: ExpSource =
     parsed.min === null

@@ -308,6 +308,19 @@ your laptop doesn't run fetches too.
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
 
+### Internship as its own role type
+**What:** an Internship chip next to Frontend, Backend, Data Science… Tech internships ("Frontend
+Intern", "Data Science Intern") get the category `internship`; non-tech ones ("Marketing Intern")
+stay under Other. The role is still remembered underneath, so tailoring picks the right base
+resume. **Design choice:** internships stay "no" for a full-time search, so the chip also
+switches "Can I apply?" to All; otherwise it would always look empty. **Found on the way:** titles
+saying "Software *Engineering*" weren't recognised as tech at all (the rule only knew "Software
+Engineer"), which a test with a real-looking title exposed. Bumping `SCORING_VERSION` re-sorts
+everyone's existing jobs.
+**Lesson:** a category and a verdict are different things. Mixing them up ("internship = no") made
+internships impossible to browse. And test with real-looking inputs: they find the gaps that
+tidy examples miss.
+
 ### Fetches on time, but no notifications
 **Problem:** after the scheduling fix, every fetch ran on the hour, yet no notifications arrived
 at 6 pm, 9 pm or 9 am. **Investigation, one stage at a time:** the fetches ran (`fetch_runs`);

@@ -11,7 +11,7 @@ const TITLE_RULES: [Category, RegExp][] = [
   ["fullstack", /\b(full[\s-]?stack|mern|mean stack)\b/i],
   ["frontend", /\b(front[\s-]?end|ui (developer|engineer)|react(\.?js)? (developer|engineer)|angular (developer|engineer)|vue(\.?js)? (developer|engineer)|web developer)\b/i],
   ["backend", /\b(back[\s-]?end|server[\s-]side|api (developer|engineer)|node(\.?js)? (developer|engineer)|java (developer|engineer)|python (developer|engineer)|golang|go (developer|engineer)|\.net (developer|engineer)|php (developer|engineer)|django|spring boot)\b/i],
-  ["sde", /\b(software (development )?(engineer|developer)|sde|swe|associate engineer|programmer|application developer|member of technical staff|mts|graduate engineer|engineer trainee|product engineer)\b/i],
+  ["sde", /\b(software (development )?(engineer|engineering|developer)|sde|swe|associate engineer|programmer|application developer|member of technical staff|mts|graduate engineer|engineer trainee|product engineer)\b/i],
 ];
 
 // Roles that aren't software development, even when the description mentions tech
@@ -51,7 +51,7 @@ function groupCounts(skills: string[]): Record<SkillGroup, number> {
 
 /** Which of your base resumes this job should get. */
 export function pickTrack(category: Category, jobSkills: string[]): Track {
-  if (category !== "sde" && category !== "other") return category;
+  if (category !== "sde" && category !== "other" && category !== "internship") return category;
   const c = groupCounts(jobSkills);
   if (c.security >= 3 && c.security > c.frontend + c.backend) return "security";
   if (c.data >= 3 && c.data > c.frontend + c.backend) return "data";

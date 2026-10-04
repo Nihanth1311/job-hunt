@@ -179,6 +179,13 @@ export async function categoryCounts(uid: string, f: JobFilters): Promise<Record
     out.all += r.n;
     if (r.category !== "other") out.tech += r.n;
   }
+  // The Internship chip shows every internship whatever the verdict (they're never "ready to
+  // apply" for a full-time search), so count them that way too.
+  const [interns] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(schema.jobs)
+    .where(and(...(await baseConditions(uid, { ...f, fit: "all" }, false)), eq(schema.jobs.category, "internship")));
+  out.internship = interns?.n ?? 0;
   return out;
 }
 
