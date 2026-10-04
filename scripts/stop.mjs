@@ -1,5 +1,5 @@
 // `npm run stop`: stops the running Job Hunt server, found through the database lock file
-// (data/pglite.lock holds the server's process id; see src/lib/db/index.ts).
+// (data/pglite.lock holds the server's process id; see src/server/db/index.ts).
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";

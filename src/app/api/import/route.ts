@@ -1,11 +1,11 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
-import { requireUser } from "@/lib/auth";
-import { getDb, schema } from "@/lib/db";
-import { getJob } from "@/lib/queries";
-import { replaceJobDescription, rescoreAll } from "@/lib/jobs";
-import { getProfile, savePreferences, saveProfile } from "@/lib/settings";
-import { DEFAULT_PREFERENCES, DEFAULT_PROFILE, type Preferences, type Profile } from "@/lib/types";
+import { requireUser } from "@/server/auth";
+import { getDb, schema } from "@/server/db";
+import { getJob } from "@/server/services/queries";
+import { replaceJobDescription, rescoreAll } from "@/server/services/jobs";
+import { getProfile, savePreferences, saveProfile } from "@/server/services/settings";
+import { DEFAULT_PREFERENCES, DEFAULT_PROFILE, type Preferences, type Profile } from "@/shared/types";
 
 export const dynamic = "force-dynamic";
 

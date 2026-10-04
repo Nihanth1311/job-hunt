@@ -1,22 +1,23 @@
 import type { Metadata } from "next";
-import { ApiKeysCard } from "@/components/api-keys-card";
-import { CompaniesCard } from "@/components/companies-card";
-import { FetchButton } from "@/components/fetch-button";
-import { PushCard } from "@/components/push-card";
-import { RestoreBackup } from "@/components/restore-backup";
-import { SettingsForm } from "@/components/settings-form";
-import { Badge, buttonClass, Card, CardTitle, cx, Icon, PageHeader } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
-import { formatDateTime, timeAgo } from "@/lib/format";
-import { getPushLog, getPushMode, getPushSubs, vapidPublicKey } from "@/lib/notify/push";
-import { telegramConfigured } from "@/lib/notify/telegram";
-import { careerSiteCounts, recentFetchRuns } from "@/lib/queries";
-import { nextSlot, slotTimesLabel } from "@/lib/core/schedule";
-import { getWakeups } from "@/lib/scheduler";
-import { getPreferences, getSecrets, getState, maskSecret, telegramEnabled } from "@/lib/settings";
-import { SOURCES } from "@/lib/sources";
-import { getCompanyHealth } from "@/lib/sources/companies";
-import { COMPANIES, SECTORS } from "@/lib/sources/companies/registry";
+import { ApiKeysCard } from "@/client/components/settings/api-keys-card";
+import { CompaniesCard } from "@/client/components/settings/companies-card";
+import { FetchButton } from "@/client/components/jobs/fetch-button";
+import { PushCard } from "@/client/components/settings/push-card";
+import { RestoreBackup } from "@/client/components/settings/restore-backup";
+import { SettingsForm } from "@/client/components/settings/settings-form";
+import { Badge, buttonClass, Card, CardTitle, cx, Icon, PageHeader } from "@/client/components/ui";
+import { requireUser } from "@/server/auth";
+import { formatDateTime, timeAgo } from "@/shared/format";
+import { getPushLog, getPushMode, getPushSubs, vapidPublicKey } from "@/server/notify/push";
+import { telegramConfigured } from "@/server/notify/telegram";
+import { careerSiteCounts, recentFetchRuns } from "@/server/services/queries";
+import { nextSlot, slotTimesLabel } from "@/shared/core/schedule";
+import { getWakeups } from "@/server/fetching/scheduler";
+import { getPreferences, getSecrets, getState, maskSecret, telegramEnabled } from "@/server/services/settings";
+import { SOURCES } from "@/server/fetching/sources";
+import { getCompanyHealth } from "@/server/fetching/sources/companies";
+import { COMPANIES, SECTORS } from "@/server/fetching/sources/companies/registry";
+import { API } from "@/client/api/endpoints";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -183,7 +184,7 @@ export default async function SettingsPage() {
               {user.role === "admin" && " · admin"}. Your jobs, profile, resumes and keys are visible only to you.
             </p>
             <div className="flex flex-wrap gap-2">
-              <a href="/api/export" className={buttonClass("secondary", "sm")}>
+              <a href={API.exportData} className={buttonClass("secondary", "sm")}>
                 <Icon name="download" className="size-3.5" /> Export my data (JSON)
               </a>
               <RestoreBackup />
@@ -192,7 +193,7 @@ export default async function SettingsPage() {
                   <Icon name="lock" className="size-3.5" /> Admin
                 </a>
               )}
-              <form action="/api/auth/logout" method="post">
+              <form action={API.signOut} method="post">
                 <button className={buttonClass("ghost", "sm")}>
                   <Icon name="logout" className="size-3.5" /> Sign out
                 </button>

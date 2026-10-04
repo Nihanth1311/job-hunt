@@ -1,4 +1,4 @@
-import { appIcon } from "@/lib/app-icon";
+import { appIcon } from "@/server/app-icon";
 
 const SIZES = [96, 192, 512];
 

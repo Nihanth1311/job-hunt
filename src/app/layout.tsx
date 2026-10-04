@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Schibsted_Grotesk } from "next/font/google";
-import { THEME_SCRIPT } from "@/lib/theme";
+import { THEME_SCRIPT } from "@/shared/theme";
 import "./globals.css";
 
 // One grotesk for everything (bold and tight for headings), plus a mono for code and keys.

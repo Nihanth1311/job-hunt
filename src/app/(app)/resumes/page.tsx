@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { JobsLink } from "@/components/jobs-memory";
-import { BaseResumeCard } from "@/components/base-resume-card";
-import { buttonClass, Callout, Card, Icon, PageHeader } from "@/components/ui";
-import { formatDate } from "@/lib/format";
-import { getBaseResumes, listTailoredResumes } from "@/lib/queries";
-import { requireUser } from "@/lib/auth";
-import { getProfile } from "@/lib/settings";
-import { TRACK_LABEL, TRACKS, type Track } from "@/lib/types";
+import { JobsLink } from "@/client/components/layout/jobs-memory";
+import { BaseResumeCard } from "@/client/components/resumes/base-resume-card";
+import { buttonClass, Callout, Card, Icon, PageHeader } from "@/client/components/ui";
+import { formatDate } from "@/shared/format";
+import { getBaseResumes, listTailoredResumes } from "@/server/services/queries";
+import { requireUser } from "@/server/auth";
+import { getProfile } from "@/server/services/settings";
+import { TRACK_LABEL, TRACKS, type Track } from "@/shared/types";
 
 export const metadata: Metadata = { title: "Resumes" };
 

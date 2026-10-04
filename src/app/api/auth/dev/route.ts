@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { adminEmails, devLoginAllowed, signInVerified, startSession } from "@/lib/auth";
-import { onFirstSignIn } from "@/lib/accounts";
-import { siteUrl } from "@/lib/auth/google";
+import { adminEmails, devLoginAllowed, signInVerified, startSession } from "@/server/auth";
+import { onFirstSignIn } from "@/server/services/accounts";
+import { siteUrl } from "@/server/auth/google";
 
 export const dynamic = "force-dynamic";
 

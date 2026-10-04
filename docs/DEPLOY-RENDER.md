@@ -45,7 +45,7 @@ Then **Actions -> Fetch jobs -> Run workflow** to fill the job pool right away (
 2. On your laptop: **Settings -> Your account -> Export my data**.
 3. On the live site: **Settings -> Your account -> Restore from a backup** and pick that file.
 4. **Settings -> Your API keys**: add your Google Jobs (JSearch) key.
-5. **People**: invite your friends (and add them as test users in Google Cloud, or publish the app).
+5. **Admin**: invite your friends (and add them as test users in Google Cloud, or publish the app).
 
 ## Updating
 

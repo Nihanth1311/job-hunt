@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
-import { requireUser } from "@/lib/auth";
-import { getDb, schema } from "@/lib/db";
+import { requireUser } from "@/server/auth";
+import { getDb, schema } from "@/server/db";
 
 export const dynamic = "force-dynamic";
 

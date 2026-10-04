@@ -48,7 +48,7 @@ npx next telemetry disable
    - `http://localhost:3000/api/auth/google/callback` (your laptop)
    - `https://<your-domain>/api/auth/google/callback` (once it's online; also set `APP_URL=https://<your-domain>`)
 4. Put the client ID and secret in `.env` as `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, and your Gmail as `ADMIN_EMAIL`. Restart.
-5. Sign in. Your first sign-in as admin takes over all existing data. Invite others from **People** (sidebar); only invited Gmail addresses get in, up to `MAX_USERS` (15).
+5. Sign in. Your first sign-in as admin takes over all existing data. Invite others from **Admin** (sidebar); only invited Gmail addresses get in, up to `MAX_USERS` (15).
 
 Each person's jobs, verdicts, profile, resumes, tracker and keys are private to them. Removing someone on **People** signs them out everywhere at once (and can delete their data).
 
@@ -79,24 +79,38 @@ See **[docs/DEPLOY.md](docs/DEPLOY.md)**. It covers a free Oracle Cloud server, 
 
 ## Project layout
 
+Three layers, plus Next.js routing. The full tour is in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
+
 ```
 src/
-  app/(app)/        Pages: Today, Jobs, Tracker, Resume & Claude, Profile, Settings
-  app/api/          /api/cron/fetch (external scheduler), /api/export (download your data)
-  actions/          Server actions (what the buttons do)
-  components/       UI
-  lib/core/         Pure logic: categories, salary (LPA), experience, skills, scoring, prompts
-  lib/sources/      Job sources: adzuna, jsearch, careers (greenhouse / lever / ashby)
-  lib/db/           Database schema (Drizzle ORM). PGlite locally, PostgreSQL in production
-  lib/fetcher.ts    Fetch → analyse → store → alerts
-  lib/scheduler.ts  Runs the fetcher every few hours inside the server
-  proxy.ts          Password lock
-drizzle/            Database migrations (applied automatically on start)
+  app/                  Routes only: pages (app/(app)/…/page.tsx) and API endpoints (app/api/…/route.ts)
+  client/               Frontend: what you see and click
+    api/endpoints.ts      Every API address the screens use
+    api/requests.ts       The browser calls to those addresses
+    components/           UI, by area: ui/ (building blocks), layout/, jobs/, resumes/, tracker/,
+                          settings/, profile/, admin/
+  server/               Backend: only ever runs on the server
+    actions/              Server actions: what the buttons do
+    auth/                 Google sign-in, sessions, encryption
+    db/                   Database connection and schema (Drizzle). PGlite locally, Postgres (Neon) live
+    services/             Business logic: jobs, applications, accounts, settings, queries
+    fetching/             The fetch pipeline: fetcher, scheduler, sources/ (company careers sites, Google Jobs)
+    notify/               Phone push and Telegram
+  shared/               Used by both sides: pure logic, no database
+    core/                 Scoring, experience, skills, role types, prompts, LaTeX, schedule maths
+    types.ts              Shared types, including what the server hands to the screens
+  proxy.ts              First gate on every request (signed in?)
+  instrumentation.ts    Starts the scheduler when the server starts
+drizzle/                Database migrations (applied automatically on start)
 ```
 
-Add a new job source by implementing `JobSource` in `src/lib/sources/` and listing it in `SOURCES`.
+The layer rules are enforced by `npm run lint` (see `eslint.config.mjs`): the frontend reaches the
+backend only through `server/actions`, `shared` depends on neither side, and the backend never
+imports the frontend.
 
-After changing `src/lib/db/schema.ts`, run `npm run db:generate` to create a migration.
+Add a new job source by implementing `JobSource` in `src/server/fetching/sources/` and listing it in `SOURCES`.
+
+After changing `src/server/db/schema.ts`, run `npm run db:generate` to create a migration.
 
 ## Checks
 

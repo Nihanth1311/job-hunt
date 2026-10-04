@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { googleConfigured, secureCookies } from "@/lib/auth";
-import { seal } from "@/lib/auth/crypto";
-import { authorizeUrl, callbackUrl, newFlow, OAUTH_COOKIE, safeNext, siteUrl } from "@/lib/auth/google";
+import { googleConfigured, secureCookies } from "@/server/auth";
+import { seal } from "@/server/auth/crypto";
+import { authorizeUrl, callbackUrl, newFlow, OAUTH_COOKIE, safeNext, siteUrl } from "@/server/auth/google";
 
 export const dynamic = "force-dynamic";
 

@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { LatexResume } from "@/components/latex-resume";
-import { PrintButton } from "@/components/print-button";
-import { isLatex } from "@/lib/core/latex";
-import { markdownToHtml } from "@/lib/core/markdown";
-import { requireUser } from "@/lib/auth";
-import { getResume } from "@/lib/queries";
-import { TRACK_LABEL, type Track } from "@/lib/types";
+import { LatexResume } from "@/client/components/resumes/latex-resume";
+import { PrintButton } from "@/client/components/resumes/print-button";
+import { isLatex } from "@/shared/core/latex";
+import { markdownToHtml } from "@/shared/core/markdown";
+import { requireUser } from "@/server/auth";
+import { getResume } from "@/server/services/queries";
+import { TRACK_LABEL, type Track } from "@/shared/types";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Resume" };

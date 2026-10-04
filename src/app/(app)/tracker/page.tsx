@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { addApplication } from "@/actions/applications";
-import { TrackerBoard } from "@/components/tracker-board";
-import { buttonClass, Card, cx, Icon, PageHeader } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
-import { listApplications } from "@/lib/queries";
-import { APP_STATUSES, STATUS_LABEL, TRACK_LABEL, TRACKS } from "@/lib/types";
+import { addApplication } from "@/server/actions/applications";
+import { TrackerBoard } from "@/client/components/tracker/tracker-board";
+import { buttonClass, Card, cx, Icon, PageHeader } from "@/client/components/ui";
+import { requireUser } from "@/server/auth";
+import { listApplications } from "@/server/services/queries";
+import { APP_STATUSES, STATUS_LABEL, TRACK_LABEL, TRACKS } from "@/shared/types";
 
 export const metadata: Metadata = { title: "Tracker" };
 

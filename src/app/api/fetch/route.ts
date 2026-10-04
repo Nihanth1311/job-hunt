@@ -1,5 +1,5 @@
-import { getSessionUser } from "@/lib/auth";
-import { fetchStatus, startManualFetch } from "@/lib/fetcher";
+import { getSessionUser } from "@/server/auth";
+import { fetchStatus, startManualFetch } from "@/server/fetching/fetcher";
 
 export const dynamic = "force-dynamic";
 

@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { signInVerified, startSession } from "@/lib/auth";
-import { unseal } from "@/lib/auth/crypto";
-import { callbackUrl, OAUTH_COOKIE, siteUrl, verifiedProfile, type Flow } from "@/lib/auth/google";
-import { onFirstSignIn } from "@/lib/accounts";
+import { signInVerified, startSession } from "@/server/auth";
+import { unseal } from "@/server/auth/crypto";
+import { callbackUrl, OAUTH_COOKIE, siteUrl, verifiedProfile, type Flow } from "@/server/auth/google";
+import { onFirstSignIn } from "@/server/services/accounts";
 
 export const dynamic = "force-dynamic";
 

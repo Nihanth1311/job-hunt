@@ -1,7 +1,7 @@
-import { Nav } from "@/components/nav";
-import { requireUser } from "@/lib/auth";
-import { ensureScored } from "@/lib/jobs";
-import { getProfile } from "@/lib/settings";
+import { Nav } from "@/client/components/layout/nav";
+import { requireUser } from "@/server/auth";
+import { ensureScored } from "@/server/services/jobs";
+import { getProfile } from "@/server/services/settings";
 
 // Every page reads live data from the database, for whoever is signed in.
 export const dynamic = "force-dynamic";

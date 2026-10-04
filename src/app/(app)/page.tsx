@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { FetchButton } from "@/components/fetch-button";
-import { JobsLink } from "@/components/jobs-memory";
-import { ArrowLink, buttonClass, Card, CardTitle, CategoryBadge, cx, Icon, PageHeader, SalaryBadge, ScorePill, Stat } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
-import { formatDate, isOverdue, timeAgo } from "@/lib/format";
-import { dashboardData, getBaseResumes } from "@/lib/queries";
-import { getPreferences, getProfile, getSecrets, getState } from "@/lib/settings";
-import { SOURCES } from "@/lib/sources";
-import { APP_STATUSES, CATEGORIES, STATUS_LABEL, type Category } from "@/lib/types";
+import { FetchButton } from "@/client/components/jobs/fetch-button";
+import { JobsLink } from "@/client/components/layout/jobs-memory";
+import { ArrowLink, buttonClass, Card, CardTitle, CategoryBadge, cx, Icon, PageHeader, SalaryBadge, ScorePill, Stat } from "@/client/components/ui";
+import { requireUser } from "@/server/auth";
+import { formatDate, isOverdue, timeAgo } from "@/shared/format";
+import { dashboardData, getBaseResumes } from "@/server/services/queries";
+import { getPreferences, getProfile, getSecrets, getState } from "@/server/services/settings";
+import { SOURCES } from "@/server/fetching/sources";
+import { APP_STATUSES, CATEGORIES, STATUS_LABEL, type Category } from "@/shared/types";
 
 export default async function TodayPage() {
   const { id: uid } = await requireUser();

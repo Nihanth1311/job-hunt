@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { ProfileForm } from "@/components/profile-form";
-import { PageHeader } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
-import { getProfile } from "@/lib/settings";
+import { ProfileForm } from "@/client/components/profile/profile-form";
+import { PageHeader } from "@/client/components/ui";
+import { requireUser } from "@/server/auth";
+import { getProfile } from "@/server/services/settings";
 
 export const metadata: Metadata = { title: "Profile" };
 

@@ -1,5 +1,5 @@
-import { getSessionUser } from "@/lib/auth";
-import { cancelFetch } from "@/lib/fetcher";
+import { getSessionUser } from "@/server/auth";
+import { cancelFetch } from "@/server/fetching/fetcher";
 
 export const dynamic = "force-dynamic";
 

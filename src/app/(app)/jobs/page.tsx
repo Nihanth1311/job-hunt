@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CompanyFilter, type CompanyChoice } from "@/components/company-filter";
-import { FetchButton } from "@/components/fetch-button";
-import { FilterNavProvider, FilterOption, NavLink, PendingArea } from "@/components/filter-nav";
-import { JobCard } from "@/components/job-card";
-import { RememberJobsFilters } from "@/components/jobs-memory";
-import { buttonClass, Card, cx, EmptyState, Icon, PageHeader, Segmented, segmentClass } from "@/components/ui";
+import { CompanyFilter, type CompanyChoice } from "@/client/components/jobs/company-filter";
+import { FetchButton } from "@/client/components/jobs/fetch-button";
+import { FilterNavProvider, FilterOption, NavLink, PendingArea } from "@/client/components/jobs/filter-nav";
+import { JobCard } from "@/client/components/jobs/job-card";
+import { RememberJobsFilters } from "@/client/components/layout/jobs-memory";
+import { buttonClass, Card, cx, EmptyState, Icon, PageHeader, Segmented, segmentClass } from "@/client/components/ui";
 import {
   categoryCounts,
   companyCounts,
@@ -16,11 +16,11 @@ import {
   type FilterSummary,
   type JobFilters,
   type WindowKey,
-} from "@/lib/queries";
-import { requireUser } from "@/lib/auth";
-import { getPreferences, getSecrets, getState } from "@/lib/settings";
-import { SOURCES } from "@/lib/sources";
-import { CATEGORIES, CATEGORY_LABEL } from "@/lib/types";
+} from "@/server/services/queries";
+import { requireUser } from "@/server/auth";
+import { getPreferences, getSecrets, getState } from "@/server/services/settings";
+import { SOURCES } from "@/server/fetching/sources";
+import { CATEGORIES, CATEGORY_LABEL } from "@/shared/types";
 
 export const metadata: Metadata = { title: "Jobs" };
 

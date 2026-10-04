@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { buttonClass, cx } from "@/components/ui";
-import { devLoginAllowed, getSessionUser, googleConfigured, MAX_USERS } from "@/lib/auth";
+import { ThemeToggle } from "@/client/components/layout/theme-toggle";
+import { buttonClass, cx } from "@/client/components/ui";
+import { devLoginAllowed, getSessionUser, googleConfigured, MAX_USERS } from "@/server/auth";
+import { API } from "@/client/api/endpoints";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Sign in" };
@@ -52,7 +53,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           {message && <p className="mt-6 rounded-lg border border-bad/25 bg-bad/8 px-4 py-3 text-sm text-bad">{message}</p>}
 
           {googleConfigured() ? (
-            <a href={`/api/auth/google?next=${encodeURIComponent(nextPath)}`} className={cx(buttonClass("secondary"), "mt-8 h-12 w-full gap-3 text-[15px]")}>
+            <a href={API.googleSignIn(nextPath)} className={cx(buttonClass("secondary"), "mt-8 h-12 w-full gap-3 text-[15px]")}>
               <GoogleMark />
               Continue with Google
             </a>
@@ -64,7 +65,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           )}
 
           {devLoginAllowed(host) && (
-            <form action="/api/auth/dev" method="post" className="mt-3">
+            <form action={API.devSignIn} method="post" className="mt-3">
               <button className={cx(buttonClass("ghost"), "w-full")}>Continue as admin (this computer only)</button>
             </form>
           )}

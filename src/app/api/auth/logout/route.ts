@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { endSession } from "@/lib/auth";
-import { siteUrl } from "@/lib/auth/google";
+import { endSession } from "@/server/auth";
+import { siteUrl } from "@/server/auth/google";
 
 export const dynamic = "force-dynamic";
 

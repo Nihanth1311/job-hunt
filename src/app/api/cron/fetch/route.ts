@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { after } from "next/server";
-import { tick } from "@/lib/scheduler";
+import { tick } from "@/server/fetching/scheduler";
 
 // For hosts without a long-running server (e.g. Vercel): call this from any cron
 // (GitHub Actions, cron-job.org) with header  Authorization: Bearer <CRON_SECRET>.

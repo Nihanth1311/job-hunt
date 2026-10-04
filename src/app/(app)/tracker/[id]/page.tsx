@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ApplicationDetail } from "@/components/application-detail";
-import { Icon, PageHeader, TrackBadge } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
-import { getApplication } from "@/lib/queries";
+import { ApplicationDetail } from "@/client/components/tracker/application-detail";
+import { Icon, PageHeader, TrackBadge } from "@/client/components/ui";
+import { requireUser } from "@/server/auth";
+import { getApplication } from "@/server/services/queries";
 
 export const metadata: Metadata = { title: "Application" };
 

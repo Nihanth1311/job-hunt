@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { JobsLink } from "@/components/jobs-memory";
-import { AddJobForm } from "@/components/add-job-form";
-import { Icon, PageHeader } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
-import { getPreferences, getProfile } from "@/lib/settings";
+import { JobsLink } from "@/client/components/layout/jobs-memory";
+import { AddJobForm } from "@/client/components/jobs/add-job-form";
+import { Icon, PageHeader } from "@/client/components/ui";
+import { requireUser } from "@/server/auth";
+import { getPreferences, getProfile } from "@/server/services/settings";
 
 export const metadata: Metadata = { title: "Add a job" };
 

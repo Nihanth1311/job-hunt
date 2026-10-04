@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { AdminFeatures } from "@/components/admin-features";
-import { PeopleManager } from "@/components/people-manager";
-import { PageHeader } from "@/components/ui";
-import { listPeople } from "@/lib/accounts";
-import { MAX_USERS, requireAdmin } from "@/lib/auth";
-import { telegramEnabled } from "@/lib/settings";
+import { AdminFeatures } from "@/client/components/admin/admin-features";
+import { PeopleManager } from "@/client/components/admin/people-manager";
+import { PageHeader } from "@/client/components/ui";
+import { listPeople } from "@/server/services/accounts";
+import { MAX_USERS, requireAdmin } from "@/server/auth";
+import { telegramEnabled } from "@/server/services/settings";
 
 export const metadata: Metadata = { title: "Admin" };
 

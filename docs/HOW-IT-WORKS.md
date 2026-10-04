@@ -61,47 +61,83 @@ Everything runs on free plans. See [§10](#10-hosting-and-what-it-costs).
 > browser*: they handle clicks, typing and live updates. Rule of thumb: server for data, client
 > for interaction. Example: [settings/page.tsx](../src/app/(app)/settings/page.tsx) (server)
 > reads your keys and passes masked versions to
-> [api-keys-card.tsx](../src/components/api-keys-card.tsx) (client) to show and edit.
+> [api-keys-card.tsx](../src/client/components/settings/api-keys-card.tsx) (client) to show and edit.
 
 ---
 
 ## 3. Folder map
 
+The code is split into **three layers**, plus the routing folder Next.js requires:
+
 ```
 job-hunt-hq/
 ├─ src/
-│  ├─ app/                  ← every URL is a folder here (the "App Router")
-│  │  ├─ (app)/             ← signed-in pages; (app) groups them under one layout
-│  │  │  ├─ page.tsx        ← "/"  Today
-│  │  │  ├─ jobs/           ← "/jobs" list and "/jobs/[id]" job page
+│  ├─ app/                    ← ROUTES ONLY: which URL shows what (Next.js requires this folder)
+│  │  ├─ (app)/               ← signed-in pages; (app) groups them under one layout
+│  │  │  ├─ page.tsx          ← "/"  Today
+│  │  │  ├─ jobs/             ← "/jobs" list and "/jobs/[id]" job page
 │  │  │  ├─ tracker/ resumes/ profile/ settings/ admin/
-│  │  │  └─ layout.tsx      ← nav bar, sign-in check, re-scoring check
-│  │  ├─ login/             ← the only page you can see signed out
-│  │  ├─ api/               ← plain HTTP endpoints (sign-in, cron, fetch, export)
-│  │  ├─ manifest.ts        ← makes the site installable as a phone app
-│  │  └─ layout.tsx         ← <html>, fonts, theme
-│  ├─ actions/              ← server actions: functions the UI calls like normal functions
-│  ├─ components/           ← React components (UI)
-│  ├─ lib/                  ← the brains, no UI
-│  │  ├─ core/              ← pure logic: scoring, experience, skills, prompts
-│  │  ├─ sources/           ← where jobs come from (one reader per site type)
-│  │  ├─ db/                ← database connection + table definitions (schema.ts)
-│  │  ├─ auth/              ← Google sign-in, sessions, encryption
-│  │  ├─ notify/            ← phone push + Telegram
-│  │  ├─ fetcher.ts         ← runs a fetch for a person
-│  │  └─ scheduler.ts       ← decides who is due a fetch
-│  └─ proxy.ts              ← first gate on every request (signed in?)
-├─ drizzle/                 ← database migrations (numbered SQL files)
-├─ public/sw.js             ← the service worker (notifications)
-├─ .github/workflows/       ← the hourly GitHub alarm clock
-├─ Dockerfile, render.yaml  ← how Render builds and runs the app
-└─ .env                     ← your secrets (never committed)
+│  │  │  └─ layout.tsx        ← nav bar, sign-in check, re-scoring check
+│  │  ├─ login/               ← the only page you can see signed out
+│  │  ├─ api/                 ← API endpoints (thin: they hand the work to server/)
+│  │  ├─ manifest.ts          ← makes the site installable as a phone app
+│  │  └─ layout.tsx           ← <html>, fonts, theme
+│  │
+│  ├─ client/                 ← FRONTEND: what you see and click
+│  │  ├─ api/
+│  │  │  ├─ endpoints.ts      ← every API address the screens use, in one list
+│  │  │  └─ requests.ts       ← the browser's calls to them: startFetch(), getFetchStatus()…
+│  │  └─ components/
+│  │     ├─ ui/               ← building blocks, one per file: button, card, badge, icon…
+│  │     ├─ layout/           ← nav bar, avatar, theme switch
+│  │     ├─ jobs/ resumes/ tracker/ settings/ profile/ admin/   ← each screen's parts
+│  │
+│  ├─ server/                 ← BACKEND: only ever runs on the server
+│  │  ├─ actions/             ← server actions: what the buttons do (the frontend's only door in)
+│  │  ├─ auth/                ← Google sign-in, sessions, encryption
+│  │  ├─ db/                  ← database connection + table definitions (schema.ts)
+│  │  ├─ services/            ← business logic: jobs, applications, accounts, settings, queries
+│  │  ├─ fetching/            ← fetcher.ts, scheduler.ts, and sources/ (one reader per site type)
+│  │  └─ notify/              ← phone push + Telegram
+│  │
+│  ├─ shared/                 ← USED BY BOTH: pure logic, no database, no browser-only code
+│  │  ├─ core/                ← scoring, experience, skills, role types, prompts, schedule maths
+│  │  └─ types.ts             ← shared types, incl. what the server hands to the screens
+│  │
+│  ├─ proxy.ts                ← first gate on every request (signed in?)  ┐ Next.js wants these
+│  └─ instrumentation.ts      ← starts the scheduler with the server      ┘ two at the top of src/
+├─ drizzle/                   ← database migrations (numbered SQL files)
+├─ public/sw.js               ← the service worker (notifications)
+├─ .github/workflows/         ← the hourly GitHub alarm clock
+├─ Dockerfile, render.yaml    ← how Render builds and runs the app
+└─ .env                       ← your secrets (never committed)
 ```
 
-> **Concept: separation of concerns.** `lib/core/` has *no* database or network code, only
-> logic: "given this job text and this profile, what's the score?" Such code is easy to test
-> and reuse. The same `analyzeJob` runs on the server during a fetch *and* in your browser when
-> you paste a job on "Add a job".
+**Who may use whom:**
+
+```
+   app/  ──────────►  client/  server/  shared/      (the glue: may use all three)
+   client/ ─────────►  shared/,  and server/actions only
+   server/ ─────────►  shared/                        (never client/)
+   shared/ ─────────►  nothing (only type names from server/db/schema, which vanish at build time)
+```
+
+These rules aren't just written down: they're in `eslint.config.mjs`, so `npm run lint` fails
+if, say, a component imports the database. Every backend file also starts with
+`import "server-only"`, so Next.js refuses to build if one ever ends up in the browser. (Two
+exceptions: the action files, whose `"use server"` already means server-only, and `db/schema.ts`,
+which the migration tool reads outside Next.js.)
+
+> **Concept: separation of concerns.** Each layer has one job. `client/` decides how things
+> *look*; `server/` decides what *happens* (database, other websites, secrets); `shared/core/`
+> is pure logic with no database or network: "given this job text and this profile, what's the
+> score?". That makes it easy to test and lets it run on both sides: the same `analyzeJob`
+> scores jobs on the server during a fetch *and* in your browser on "Add a job".
+
+> **Concept: one list of endpoints.** `client/api/endpoints.ts` names every API address once.
+> If an address changes, there's one line to edit, and searching for `API.fetch` finds every
+> place that uses it. Most buttons don't need an address at all: they call server actions,
+> which Next.js turns into requests behind the scenes.
 
 ---
 
@@ -112,10 +148,10 @@ What happens when you open `/jobs` on your phone:
 1. **[proxy.ts](../src/proxy.ts)** runs first. No `jh_session` cookie → redirect to `/login`.
    It only checks that the cookie *exists*; it's a cheap first gate.
 2. **[(app)/layout.tsx](../src/app/(app)/layout.tsx)** calls `requireUser()`, which looks the
-   session up in the database ([auth/index.ts](../src/lib/auth/index.ts)). A fake or deleted
+   session up in the database ([auth/index.ts](../src/server/auth/index.ts)). A fake or deleted
    session → back to login. This is the real check.
 3. **[jobs/page.tsx](../src/app/(app)/jobs/page.tsx)** reads the filters from the URL
-   (`?fit=ready&sort=recent`) and asks [queries.ts](../src/lib/queries.ts) for *your* jobs.
+   (`?fit=ready&sort=recent`) and asks [queries.ts](../src/server/services/queries.ts) for *your* jobs.
    Every query includes `WHERE user_id = you`.
 4. The server sends finished HTML. Your phone shows it. Buttons like **Save** call *server
    actions* in [actions/](../src/actions/), which check who you are again before changing
@@ -130,7 +166,7 @@ What happens when you open `/jobs` on your phone:
 
 ## 5. Where jobs come from (the fetch)
 
-Three steps, in [fetcher.ts](../src/lib/fetcher.ts):
+Three steps, in [fetcher.ts](../src/server/fetching/fetcher.ts):
 
 ```
  1. Shared pool (once, for everyone)       2. Your feed                3. Your own sources
@@ -142,12 +178,12 @@ Three steps, in [fetcher.ts](../src/lib/fetcher.ts):
 
 **Step 1, the shared pool.** Careers sites are checked *once* for everyone and stored in
 `raw_jobs`. Fifteen people don't mean fifteen times the traffic to Amazon. Each kind of site has
-a reader in [sources/companies/](../src/lib/sources/companies/):
+a reader in [sources/companies/](../src/server/fetching/sources/companies/):
 
 - **Workday** (most big companies): a JSON endpoint the careers page itself uses, with an India
-  filter. [workday.ts](../src/lib/sources/companies/workday.ts)
+  filter. [workday.ts](../src/server/fetching/sources/companies/workday.ts)
 - **Amazon, Google**: their own formats. Google's job data is inside the page's HTML.
-  [bigtech.ts](../src/lib/sources/companies/bigtech.ts)
+  [bigtech.ts](../src/server/fetching/sources/companies/bigtech.ts)
 - **Oracle, Eightfold, SmartRecruiters, Greenhouse, Lever, Ashby**: each its own small reader.
 
 These are the same public feeds your browser loads on a careers page, so they're free. The
@@ -172,16 +208,16 @@ than 30 days are skipped and cleaned up.
 
 ## 6. Scoring: fit, check, no
 
-All in [lib/core/](../src/lib/core/), pure functions:
+All in [shared/core/](../src/shared/core/), pure functions:
 
-- **[skills.ts](../src/lib/core/skills.ts)**: a dictionary of ~90 skills with the spellings
+- **[skills.ts](../src/shared/core/skills.ts)**: a dictionary of ~90 skills with the spellings
   JDs use ("k8s" → Kubernetes, "reactjs" → React), grouped into Frontend, Backend, DevOps, Data,
   Security and Other.
-- **[experience.ts](../src/lib/core/experience.ts)**: finds "2-4 years", "0–2 yrs",
+- **[experience.ts](../src/shared/core/experience.ts)**: finds "2-4 years", "0–2 yrs",
   "freshers welcome", "Senior …" and turns them into a range.
-- **[classify.ts](../src/lib/core/classify.ts)**: works out the role type from the title, or
+- **[classify.ts](../src/shared/core/classify.ts)**: works out the role type from the title, or
   from the description's skills if the title is vague.
-- **[analyze.ts](../src/lib/core/analyze.ts)**: puts it together.
+- **[analyze.ts](../src/shared/core/analyze.ts)**: puts it together.
 
 ```
 score = 55% skills you match  + 25% experience fits  + 10% salary  + 10% is a tech role
@@ -197,7 +233,7 @@ New users score **0** until they add skills: with nothing to compare, any number
 up.
 
 > **Concept: versioned re-scoring.** When the rules change, old scores in the database are
-> stale. `SCORING_VERSION` in [jobs.ts](../src/lib/jobs.ts) is a number we bump; each person's
+> stale. `SCORING_VERSION` in [jobs.ts](../src/server/services/jobs.ts) is a number we bump; each person's
 > feed is re-scored once, the next time they open the app.
 
 ---
@@ -205,13 +241,13 @@ up.
 ## 7. Accounts and security
 
 - **Sign-in** is Google OAuth (authorization code + PKCE) in
-  [auth/google.ts](../src/lib/auth/google.ts). Google proves who you are; we never see a password.
+  [auth/google.ts](../src/server/auth/google.ts). Google proves who you are; we never see a password.
 - **Invite-only**: an admin adds emails on the Admin page, so only those can get in. Maximum 20.
 - **Sessions**: a random token in an `httpOnly` cookie, which JavaScript can't read, so a
   malicious script can't steal it. The database stores only its **SHA-256 hash**, so a leaked
   database can't be used to sign in.
 - **Your API keys** are encrypted with **AES-256-GCM** before they're stored
-  ([auth/crypto.ts](../src/lib/auth/crypto.ts)). The key comes from `SESSION_SECRET`, which lives
+  ([auth/crypto.ts](../src/server/auth/crypto.ts)). The key comes from `SESSION_SECRET`, which lives
   only in `.env` and on Render.
 - **Secrets never go to git**: `.gitignore` excludes `.env`. Only `.env.example` (no real
   values) is committed.
@@ -243,7 +279,7 @@ entry below. **Settings → Recent fetches** shows when each alarm clock last ar
 - **Answer first, work after** (`after()` in [cron route](../src/app/api/cron/fetch/route.ts)):
   GitHub bills by the minute it waits, so we reply in milliseconds and work in the background.
 - **Fixed clock times**: "every 3 hours" means at 12, 3, 6 and 9 o'clock India time, for
-  everyone ([core/schedule.ts](../src/lib/core/schedule.ts)). Everyone on the same period is
+  everyone ([core/schedule.ts](../src/shared/core/schedule.ts)). Everyone on the same period is
   fetched in one pass, and you know when to expect your notification.
 - **Most checks don't touch the database**: after a pass, the scheduler remembers when the next
   fixed time is, and checks before then return immediately (it still looks once an hour, to
@@ -268,10 +304,10 @@ entry below. **Settings → Recent fetches** shows when each alarm clock last ar
 
 - **Subscription**: when you flip the switch, the phone creates a unique address (an
   *endpoint* at Apple or Google) plus encryption keys, and we store them. Code:
-  [push-card.tsx](../src/components/push-card.tsx) → [actions/push.ts](../src/actions/push.ts).
+  [push-card.tsx](../src/client/components/settings/push-card.tsx) → [server/actions/push.ts](../src/server/actions/push.ts).
 - **VAPID keys**: our server's own key pair that proves "this push really is from Job Hunt". Made
   automatically on first use and stored encrypted, so there was nothing for you to set up.
-  [notify/push.ts](../src/lib/notify/push.ts)
+  [notify/push.ts](../src/server/notify/push.ts)
 - **Service worker** ([public/sw.js](../public/sw.js)): a small script the phone keeps even when
   the app is closed. It wakes for a push, shows the notification, and opens the right page on tap.
 - **Why the Home Screen app?** Apple only allows web notifications for sites installed to the
@@ -307,6 +343,18 @@ your laptop doesn't run fetches too.
 ## 11. Learning journal
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
+
+### Frontend, backend and shared: a clear folder structure
+**What:** everything outside `app/` moved into three layers: `client/` (what you see),
+`server/` (what happens) and `shared/` (pure logic used by both). See [§3](#3-folder-map).
+`ui.tsx` became a folder of building blocks, one per file. Every API address now comes from
+`client/api/endpoints.ts`. **How it was kept safe:** files were moved with `git mv` (history kept)
+and imports were rewritten by a script, not by hand; nothing else changed. Then: type-check and
+lint clean, the production build listed **the same 30 routes** as before, all **58 test checks**
+passed exactly as before, and every page plus Fetch now and Cancel was clicked through in a browser.
+**Lessons:** for a big change, record a *baseline* first, change one kind of thing at a time, and
+prove "nothing changed" by comparing against the baseline. And put rules into tools: the layer
+boundaries are lint errors now, so they can't quietly erode.
 
 ### Admin page, a Telegram switch for everyone, and less clutter
 **What:** the People page is now **Admin**, with a "Features for everyone" card. Its Telegram
@@ -393,7 +441,7 @@ when the app comes back to the foreground.
 **Lesson:** *check the data before changing code.* Looking at `fetch_runs` showed the server was
 fine, which pointed straight at the client. And: never hold a request open for minutes on mobile.
 Use the **start-then-poll** pattern (or a push) for long jobs.
-[fetch-button.tsx](../src/components/fetch-button.tsx), [api/fetch/route.ts](../src/app/api/fetch/route.ts)
+[fetch-button.tsx](../src/client/components/jobs/fetch-button.tsx), [api/fetch/route.ts](../src/app/api/fetch/route.ts)
 
 ### Notify when your own Fetch now fails
 **Problem:** a failed fetch while you're out of the app was silent. **Fix:** "Fetch failed"

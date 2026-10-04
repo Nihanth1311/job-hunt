@@ -76,7 +76,7 @@ In `.env`, set at least:
 
 | Variable | Value |
 |---|---|
-| `ADMIN_EMAIL` | Your Gmail (you invite everyone else from the People page) |
+| `ADMIN_EMAIL` | Your Gmail (you invite everyone else from the Admin page) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | From Google Cloud Console; add `https://myjobs.duckdns.org/api/auth/google/callback` as a redirect URI (see README) |
 | `SESSION_SECRET` | At least 32 random characters. It also encrypts everyone's saved keys, so never change it later |
 | `POSTGRES_PASSWORD` | Letters and numbers only |
@@ -134,5 +134,5 @@ Nothing needs rewriting:
 | Managed database with automatic backups | Point `DATABASE_URL` at Neon, Supabase, RDS or similar |
 | More job searches | Upgrade the JSearch plan and raise “Google Jobs searches per day” in Settings |
 | Serverless hosting (Vercel) | Use a hosted Postgres, set `SCHEDULER=off` and `CRON_SECRET`, and call `/api/cron/fetch` from a cron (e.g. GitHub Actions) |
-| Automatic AI tailoring | Add an AI provider behind the same prompts (they're in `src/lib/core/prompts.ts`) |
+| Automatic AI tailoring | Add an AI provider behind the same prompts (they're in `src/shared/core/prompts.ts`) |
 | Bigger server | Raise the Oracle shape, or move the same `docker compose` setup to any VPS |
