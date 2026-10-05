@@ -108,9 +108,8 @@ export function PushCard({
       <CardTitle icon="bell">Phone notifications</CardTitle>
       <p className="-mt-2 max-w-2xl text-sm text-muted">
         Your jobs are fetched automatically every {intervalHours} hour{intervalHours > 1 ? "s" : ""} (change it under{" "}
-        <b>Check for new jobs every</b>); you get a notification when a fetch finds new jobs. Nothing between 11 pm and 7 am:
-        overnight finds arrive with the first one in the morning. Press <b>Fetch now</b> and you can close the app: you&apos;ll get a
-        notification when it&apos;s done.
+        <b>Check for new jobs every</b>); you get a notification after each one, day and night, even when nothing new turned
+        up. Press <b>Fetch now</b> and you can close the app: you&apos;ll get a notification when it&apos;s done.
       </p>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg px-3.5 py-3 ring-1 ring-inset ring-line">

@@ -270,7 +270,7 @@ Alarm clocks (any of them can wake the app; extra wake-ups are harmless)
   · the server's own timer,    ─┘     └─▶ answers "202 started" at once, then in the background:
     every 10 min while awake                scheduler.tick(): for each person
                                               · is their "Check for new jobs every N hours" up?
-                                                  → fetch → notify (every time, quiet at night)
+                                                  → fetch → notify (every time, day and night)
                                               · morning digest due? → send
 ```
 
@@ -314,9 +314,8 @@ entry below. **Settings → Recent fetches** shows when each alarm clock last ar
 - **Why the Home Screen app?** Apple only allows web notifications for sites installed to the
   Home Screen. That needs a *web app manifest* ([manifest.ts](../src/app/manifest.ts)) and an
   icon, which is why the old bookmark didn't work and the new orange "JH" icon does.
-- **Rules**: every automatic fetch → a notification, even "no new jobs", so you know it ran;
-  quiet from 11 pm to 7 am (jobs worth a look are held for the morning). Your own "Fetch now" →
-  always tells you it finished or failed, and only you.
+- **Rules**: every automatic fetch → a notification, day and night, even "no new jobs", so you
+  know it ran. Your own "Fetch now" → always tells you it finished or failed, and only you.
 
 ---
 
@@ -344,6 +343,25 @@ your laptop doesn't run fetches too.
 ## 11. Learning journal
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
+
+### No more quiet hours
+**What:** automatic fetches at 12, 3 and 6 am now notify you like any other; before, nothing was
+sent between 11 pm and 7 am and jobs found then were held for a morning notification. Without the
+hold, `notifyNewJobs` got simpler: it no longer keeps a "held" list or looks jobs up again.
+**Lesson:** features cost code. When a rule isn't wanted, removing it also removes the code that
+only existed to support it.
+
+### The 9 am notification that arrived at 9:13
+**Problem:** on 5 Oct the 9 o'clock notification only appeared at 9:13, together with a test sent
+after opening the app. **Investigation:** the "Recently sent" record showed the fetch ran at 9:00,
+the server sent the notification at **9:04:00**, and Apple **accepted** it, so our side was on
+time. The hold-up was between Apple and the phone. **Cause:** notifications went out with the
+default urgency, "normal", and push services may hold "normal" messages while a phone is idle,
+delivering them when it wakes up (here: when the app was opened). **Fix:** send with urgency
+"high", which asks for immediate delivery; a test now checks the header.
+**Lessons:** the record we added last time turned a mystery into a two-minute diagnosis: it
+showed exactly which link in the chain held the message. And read the defaults of the tools you
+use; "normal" sounded harmless, but it meant "whenever convenient".
 
 ### A progress bar for the switches
 **Problem:** flipping a switch (Telegram alerts on Admin, Notifications in Settings) waited on the
@@ -467,7 +485,7 @@ server every 3 hours. **Fix:** wake hourly; each person is fetched when *their* 
 **Lesson:** a schedule is only as fine-grained as whatever wakes it up.
 
 ### Phone notifications (Web Push)
-Service worker, manifest, VAPID keys, quiet hours. See [§9](#9-phone-notifications-web-push).
+Service worker, manifest, VAPID keys. See [§9](#9-phone-notifications-web-push).
 **Lesson:** on iPhone, web push needs the Home Screen app. Platform rules shape the feature as
 much as code does.
 

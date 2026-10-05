@@ -1,9 +1,7 @@
 import "server-only";
 import type { PushLogEntry, PushMode } from "@/shared/types";
-import { and, eq, inArray } from "drizzle-orm";
 import webpush, { WebPushError } from "web-push";
 import { decrypt, encrypt } from "../auth/crypto";
-import { getDb, schema } from "../db";
 import type { Job } from "../db/schema";
 import { getState, GLOBAL, setState } from "../services/settings";
 
@@ -20,9 +18,6 @@ export interface PushSub {
 }
 
 const MAX_DEVICES = 10;
-/** Held overnight (India time) and sent with the first fetch after this. */
-const QUIET_FROM = 23;
-const QUIET_UNTIL = 7;
 
 // ---------- Keys ----------
 
@@ -87,6 +82,10 @@ export async function sendPush(userId: string, msg: PushMessage): Promise<number
   const options = {
     vapidDetails: { subject: vapidSubject(), publicKey: keys.publicKey, privateKey: keys.privateKey },
     TTL: 6 * 3600,
+    // "high": deliver now. The default, "normal", lets Apple/Google hold the message while the
+    // phone is idle (screen off, battery saving) and hand it over when the phone wakes up; that's
+    // how the 9:04 notification on 5 Oct only arrived at 9:13, when the app was opened.
+    urgency: "high" as const,
   };
   let sent = 0;
   const gone: string[] = [];
@@ -120,43 +119,19 @@ async function logPush(userId: string, entry: PushLogEntry) {
   await setState(userId, "pushLog", [entry, ...(await getPushLog(userId))].slice(0, 20)).catch(() => {});
 }
 
-const istHour = () => (new Date().getUTCHours() + 5 + (new Date().getUTCMinutes() >= 30 ? 1 : 0)) % 24;
-const isQuiet = () => {
-  const h = istHour();
-  return h >= QUIET_FROM || h < QUIET_UNTIL;
-};
-
 /**
- * After every fetch, to that person only.
- *  - Automatic fetch: always, so you know it ran ("Automatic fetch · 3 new jobs worth a look",
- *    "· no new jobs", "· 24 new jobs, none for you yet"). Except 11 pm-7 am: jobs worth a look found
- *    then are held for the first notification of the morning, and nothing else is sent at night.
- *  - Their own "Fetch now" (`manual`): always, at any hour.
+ * After every fetch, to that person only, at any hour (there are no quiet hours):
+ *  - Automatic fetch: "Automatic fetch · 3 new jobs worth a look", "· no new jobs",
+ *    "· 24 new jobs, none for you yet", so you know it ran.
+ *  - Their own "Fetch now" (`manual`): "Fetch finished · …".
  * `failed`: sources that couldn't be reached this time, so a quiet result isn't mistaken for "nothing new".
  */
 export async function notifyNewJobs(userId: string, found: Job[], opts: { manual?: boolean; failed?: string[] } = {}): Promise<void> {
   if (!(await getPushSubs(userId)).length) return;
   const mode = await getPushMode(userId);
   const wanted = (j: Pick<Job, "fit">) => (mode === "ready" ? j.fit === "fit" : j.fit !== "no");
-  const pending = (await getState<string[]>(userId, "pushPending")) ?? [];
-  const ids = [...new Set([...pending, ...found.filter(wanted).map((j) => j.id)])];
-  if (isQuiet() && !opts.manual) {
-    if (ids.length) await setState(userId, "pushPending", ids.slice(-300));
-    return;
-  }
-  if (pending.length) await setState(userId, "pushPending", []);
-
-  const db = await getDb();
-  const jobs = !ids.length
-    ? []
-    : (
-        await db
-          .select()
-          .from(schema.jobs)
-          .where(and(eq(schema.jobs.userId, userId), inArray(schema.jobs.id, ids), eq(schema.jobs.status, "new")))
-      )
-        .filter(wanted) // a held job may have been re-scored since
-        .sort((a, b) => (a.fit === b.fit ? b.score - a.score : a.fit === "fit" ? -1 : 1));
+  // Ready-to-apply first, then by score.
+  const jobs = found.filter(wanted).sort((a, b) => (a.fit === b.fit ? b.score - a.score : a.fit === "fit" ? -1 : 1));
 
   const prefix = opts.manual ? "Fetch finished" : "Automatic fetch";
   const failedLine = opts.failed?.length ? `Couldn't reach ${opts.failed.join(", ")}.` : "";
