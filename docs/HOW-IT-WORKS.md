@@ -351,17 +351,22 @@ hold, `notifyNewJobs` got simpler: it no longer keeps a "held" list or looks job
 **Lesson:** features cost code. When a rule isn't wanted, removing it also removes the code that
 only existed to support it.
 
-### The 9 am notification that arrived at 9:13
-**Problem:** on 5 Oct the 9 o'clock notification only appeared at 9:13, together with a test sent
-after opening the app. **Investigation:** the "Recently sent" record showed the fetch ran at 9:00,
-the server sent the notification at **9:04:00**, and Apple **accepted** it, so our side was on
-time. The hold-up was between Apple and the phone. **Cause:** notifications went out with the
-default urgency, "normal", and push services may hold "normal" messages while a phone is idle,
-delivering them when it wakes up (here: when the app was opened). **Fix:** send with urgency
-"high", which asks for immediate delivery; a test now checks the header.
-**Lessons:** the record we added last time turned a mystery into a two-minute diagnosis: it
-showed exactly which link in the chain held the message. And read the defaults of the tools you
-use; "normal" sounded harmless, but it meant "whenever convenient".
+### The 9 am notification that arrived at 9:13, and the ones that never came
+**Problem 1 (5 Oct, morning):** the 9 o'clock notification only appeared at 9:13. The "Recently
+sent" record showed the server sent it at 9:04 and Apple accepted it; the phone was idle, and
+notifications sent with "normal" urgency may be held until the phone wakes. So the server was
+switched to "high" urgency.
+**Problem 2 (same afternoon):** after that, *no* server-sent notification appeared at all (12:01,
+3:04, a 3:40 test, 6:03), though Apple accepted every one. **Investigation, one variable at a
+time:** tests sent from a laptop, with high and with normal urgency, arrived; a test built exactly
+like the server's, sent to a locked phone, arrived; the app's own sending code run from the laptop
+arrived; the server's sender address (`APP_URL`) was correct. What remained: "high" urgency sent
+from Render. **Fix:** urgency is now a setting, `PUSH_URGENCY`, defaulting to "normal" (what
+worked); "high" can be tried on Render by changing it, with no code change. The root cause of
+"high from Render vanishes" is still unknown.
+**Lessons:** change one thing at a time and confirm it in the real environment, because "high
+urgency" was tested from a laptop, not from where it runs. When something can't be explained yet,
+make it a setting you can flip back, and keep the evidence.
 
 ### A progress bar for the switches
 **Problem:** flipping a switch (Telegram alerts on Admin, Notifications in Settings) waited on the

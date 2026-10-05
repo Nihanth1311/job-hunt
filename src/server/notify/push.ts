@@ -74,6 +74,18 @@ export interface PushMessage {
   tag?: string;
 }
 
+/**
+ * How urgently Apple/Google should deliver: PUSH_URGENCY in the environment, "normal" by default.
+ * History (5 Oct): "normal" let an idle phone get the 9:04 notification only at 9:13. Switching the
+ * server to "high" then made every server-sent notification vanish on the iPhone (Apple accepted
+ * them, the phone never showed them), although "high" sent from a laptop arrived fine. So
+ * "normal" is the default, and "high" can be tried on Render by changing one setting.
+ */
+function pushUrgency(): "very-low" | "low" | "normal" | "high" {
+  const u = (process.env.PUSH_URGENCY ?? "").trim().toLowerCase();
+  return u === "high" || u === "low" || u === "very-low" ? u : "normal";
+}
+
 /** Send to every device this person turned notifications on for. Returns how many got it. */
 export async function sendPush(userId: string, msg: PushMessage): Promise<number> {
   const subs = await getPushSubs(userId);
@@ -82,10 +94,7 @@ export async function sendPush(userId: string, msg: PushMessage): Promise<number
   const options = {
     vapidDetails: { subject: vapidSubject(), publicKey: keys.publicKey, privateKey: keys.privateKey },
     TTL: 6 * 3600,
-    // "high": deliver now. The default, "normal", lets Apple/Google hold the message while the
-    // phone is idle (screen off, battery saving) and hand it over when the phone wakes up; that's
-    // how the 9:04 notification on 5 Oct only arrived at 9:13, when the app was opened.
-    urgency: "high" as const,
+    urgency: pushUrgency(),
   };
   let sent = 0;
   const gone: string[] = [];
