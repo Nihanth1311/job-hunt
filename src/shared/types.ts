@@ -183,3 +183,10 @@ export interface PushLogEntry {
 // Rows from the database, as the screens receive them. `export type` is erased when the app is
 // built, so this brings no server code into the browser; it only names the shapes.
 export type { Application, ApplicationEvent, Job, ResumeVersion } from "@/server/db/schema";
+import type { Job } from "@/server/db/schema";
+
+/**
+ * A job as the Jobs list receives it: everything except the description (the bulk of the data;
+ * the card loads it when "Details" is opened), plus whether there is one.
+ */
+export type JobListItem = Omit<Job, "description"> & { hasDescription: boolean };

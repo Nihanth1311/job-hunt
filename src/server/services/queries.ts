@@ -1,11 +1,11 @@
 import "server-only";
-import { and, asc, desc, eq, gte, ilike, inArray, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gte, ilike, inArray, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { getDb, schema } from "../db";
 import { hoursAgo, seenAt } from "./jobs";
 import { RETIRED_SOURCES } from "../fetching/sources";
 import { CAREER_SOURCES } from "@/shared/core/links";
 import { getPreferences } from "./settings";
-import { CATEGORIES, type Category } from "@/shared/types";
+import { CATEGORIES, type Category, type JobListItem } from "@/shared/types";
 
 export const WINDOWS = { "24h": 24, "48h": 48, "7d": 168, "30d": 720 } as const;
 export type WindowKey = keyof typeof WINDOWS;
@@ -137,11 +137,20 @@ export async function filterSummary(uid: string, f: JobFilters): Promise<FilterS
   return { total: counts[0], shown: counts[counts.length - 1], hidden, longer };
 }
 
-export async function listJobs(uid: string, f: JobFilters, limit = 150) {
+/** Every column of a job except the description (~4.5 KB each, ~0.7 MB for a full page of 150). */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- taken out on purpose; the rest are the list columns
+const { description: _description, ...listColumns } = getTableColumns(schema.jobs);
+
+/**
+ * The Jobs list. Descriptions stay in the database (the card loads one with getJobDescription when
+ * "Details" is opened): sending all 150 on every visit and filter click used up Neon's free
+ * network allowance.
+ */
+export async function listJobs(uid: string, f: JobFilters, limit = 150): Promise<JobListItem[]> {
   const db = await getDb();
   const order = f.sort === "recent" ? [desc(seenAt), desc(schema.jobs.score)] : [desc(schema.jobs.score), desc(seenAt)];
   return db
-    .select()
+    .select({ ...listColumns, hasDescription: sql<boolean>`length(${schema.jobs.description}) > 0` })
     .from(schema.jobs)
     .where(and(...(await baseConditions(uid, f, true))))
     .orderBy(...order)

@@ -344,6 +344,21 @@ your laptop doesn't run fetches too.
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
 
+### Neon's network allowance at 95%
+**Problem:** Neon's free plan allows **5 GB a month** of data leaving the database; running out
+stops the database until the next period. It was at 95% after about 9 days. **Cause:** every
+person's fetch read the **whole shared shelf** (3,300+ jobs with descriptions, ~18 MB) to find the
+few new ones: 4 people × 8 fetches a day ≈ **575 MB a day**. The Jobs page also sent all 150
+descriptions (~0.7 MB) on every visit and filter click. **Fix:** each person remembers when they
+last took from the shelf (`poolFilledAt`) and asks only for jobs added since then, from companies
+they follow, so the database does the filtering and only those rows travel; the Jobs list no
+longer carries descriptions, and a card loads its own when you open Details. **Tested:** a fill
+after the first one reads only new jobs (a planted old job isn't even read); following a company
+fills just that company; the Jobs page sent 0 of 100 descriptions; Details still shows the text.
+**Lessons:** "it works" isn't the same as "it's cheap"; read the whole table only when you need
+the whole table. Filter in the database (`WHERE`), not in JavaScript after loading everything.
+And watch every free-plan meter, not just the first one you hit.
+
 ### No more quiet hours
 **What:** automatic fetches at 12, 3 and 6 am now notify you like any other; before, nothing was
 sent between 11 pm and 7 am and jobs found then were held for a morning notification. Without the

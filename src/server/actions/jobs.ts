@@ -106,3 +106,14 @@ export async function checkWithGoogleJobs(id: string): Promise<CheckResult> {
   refreshAll();
   return { ok: true, fit: updated?.fit ?? "check", reasons: updated?.fitReasons ?? [] };
 }
+
+/** The description of one of your jobs, for its card's "Details" (the Jobs list doesn't carry descriptions). */
+export async function getJobDescription(id: string): Promise<string> {
+  const { id: uid } = await requireUser();
+  const db = await getDb();
+  const [row] = await db
+    .select({ description: schema.jobs.description })
+    .from(schema.jobs)
+    .where(and(eq(schema.jobs.id, id), eq(schema.jobs.userId, uid)));
+  return row?.description ?? "";
+}

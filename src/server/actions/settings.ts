@@ -37,7 +37,7 @@ export async function setCompaniesFollowed(ids: string[], follow: boolean) {
     else skipped.add(id);
   }
   await savePreferences(uid, { ...prefs, skippedCompanies: [...skipped] });
-  if (follow) await fillFromPool(uid);
+  if (follow) await fillFromPool(uid, { companies: ids }); // just these companies, from the whole pool
   revalidatePath("/settings");
 }
 

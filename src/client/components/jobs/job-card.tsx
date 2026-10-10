@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { getJobDescription } from "@/server/actions/jobs";
 import { experienceLabel } from "@/shared/core/classify";
 import { siteLabel, sourceLabel } from "@/shared/core/links";
-import type { Job } from "@/shared/types";
+import type { JobListItem } from "@/shared/types";
 import { timeAgo } from "@/shared/format";
 import { CheckOnGoogle } from "./check-on-google";
 import { FitLine } from "./fit-line";
@@ -13,8 +14,15 @@ import { JobDescription } from "./job-description";
 import { Badge, Button, buttonClass, Callout, Card, CategoryBadge, cx, Icon, SalaryBadge, ScorePill } from "../ui";
 
 /** googleQuota: searches left on Google Jobs, null if unknown, undefined if Google Jobs isn't set up. */
-export function JobCard({ job, googleQuota }: { job: Job; googleQuota?: number | null }) {
+export function JobCard({ job, googleQuota }: { job: JobListItem; googleQuota?: number | null }) {
   const [open, setOpen] = useState(false);
+  // The list doesn't carry descriptions; load this one the first time "Details" is opened.
+  const [description, setDescription] = useState<string | null>(null);
+  const [loading, startLoading] = useTransition();
+  const toggleDetails = () => {
+    setOpen((o) => !o);
+    if (description === null && !loading) startLoading(async () => setDescription(await getJobDescription(job.id)));
+  };
 
   const exp = experienceLabel({ min: job.expMin, max: job.expMax });
   const source = sourceLabel(job);
@@ -98,8 +106,8 @@ export function JobCard({ job, googleQuota }: { job: Job; googleQuota?: number |
               </Link>
             }
             trailing={
-              job.description && (
-                <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setOpen((o) => !o)}>
+              job.hasDescription && (
+                <Button size="sm" variant="ghost" className="ml-auto" onClick={toggleDetails}>
                   {open ? "Hide details" : "Details"}
                   <Icon name="chevronDown" className={cx("size-3.5 transition", open && "rotate-180")} />
                 </Button>
@@ -114,7 +122,7 @@ export function JobCard({ job, googleQuota }: { job: Job; googleQuota?: number |
                   This source only shared the first part of the description. Open the job page to add the full text.
                 </Callout>
               )}
-              <JobDescription text={job.description} />
+              {description === null ? <p className="text-sm text-muted">Loading…</p> : <JobDescription text={description} />}
               <Link href={page} className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline">
                 Open the full job page <Icon name="arrowRight" className="size-3.5" />
               </Link>

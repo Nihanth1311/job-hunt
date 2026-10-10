@@ -191,22 +191,52 @@ async function doRefreshPool(force: boolean, maxAgeHours: number): Promise<Sourc
 }
 
 /** Copy pool jobs into one person's feed: companies they follow, not already in their feed, scored for them. */
-export async function fillFromPool(userId: string): Promise<Job[]> {
+/**
+ * Copy jobs from the shared pool into one person's feed. Reads only what that person can still be
+ * missing: jobs added to the pool since their last fill, from companies they follow. Reading the
+ * whole pool every time (3,000+ jobs with descriptions, ~18 MB, for every person at every fetch)
+ * used up Neon's 5 GB-a-month network allowance in about 9 days.
+ * `companies`: just-followed companies, filled from the whole pool once (there's no "last time" for them).
+ */
+export async function fillFromPool(userId: string, opts: { companies?: string[] } = {}): Promise<Job[]> {
   const db = await getDb();
   const [profile, prefs] = await Promise.all([getProfile(userId), getPreferences(userId)]);
-  const following = new Set(followedCompanies(prefs).map((c) => c.id));
-  const since = new Date(Date.now() - MAX_AGE_DAYS * 86_400_000);
-  const pool = await db.select().from(schema.rawJobs).where(gte(schema.rawJobs.postedAt, since));
-  const have = new Set((await db.select({ id: schema.jobs.id }).from(schema.jobs).where(eq(schema.jobs.userId, userId))).map((r) => r.id));
+  const following = followedCompanies(prefs).map((c) => c.id);
+  const companies = opts.companies ? opts.companies.filter((id) => following.includes(id)) : following;
+  if (!companies.length) return [];
 
-  const fresh = pool
-    .filter((p) => p.companyId && following.has(p.companyId))
-    .map((p) => {
-      const raw = p.data as RawJob;
-      return { ...raw, postedAt: raw.postedAt ? new Date(raw.postedAt) : null } as RawJob;
-    })
-    .filter((raw) => !have.has(jobId(userId, raw.source, raw.externalId)));
-  return insertJobs(userId, fresh.map((raw) => toNewJob(userId, raw, profile, prefs)));
+  const startedAt = new Date();
+  // Before poolFilledAt existed, "lastFetchAt" (when their previous fetch, and so its fill, began)
+  // marks the same point, so existing people don't re-read the whole pool once after this change.
+  const filledAt = opts.companies
+    ? null
+    : ((await getState<string>(userId, "poolFilledAt")) ?? (await getState<string>(userId, "lastFetchAt")));
+  const conditions = [
+    gte(schema.rawJobs.postedAt, new Date(Date.now() - MAX_AGE_DAYS * 86_400_000)),
+    inArray(schema.rawJobs.companyId, companies),
+  ];
+  // 10 minutes of overlap, so a job added while the last fill was running isn't missed (duplicates are skipped below).
+  if (filledAt) conditions.push(gte(schema.rawJobs.fetchedAt, new Date(new Date(filledAt).getTime() - 10 * 60_000)));
+  const pool = await db.select({ data: schema.rawJobs.data }).from(schema.rawJobs).where(and(...conditions));
+
+  const candidates = pool.map((p) => {
+    const raw = p.data as RawJob;
+    return { ...raw, postedAt: raw.postedAt ? new Date(raw.postedAt) : null } as RawJob;
+  });
+  // Which of these does this person already have? Ask about these ids only, not their whole feed.
+  const ids = candidates.map((raw) => jobId(userId, raw.source, raw.externalId));
+  const have = new Set<string>();
+  for (let i = 0; i < ids.length; i += 500) {
+    const rows = await db
+      .select({ id: schema.jobs.id })
+      .from(schema.jobs)
+      .where(and(eq(schema.jobs.userId, userId), inArray(schema.jobs.id, ids.slice(i, i + 500))));
+    rows.forEach((r) => have.add(r.id));
+  }
+  const fresh = candidates.filter((raw) => !have.has(jobId(userId, raw.source, raw.externalId)));
+  const inserted = await insertJobs(userId, fresh.map((raw) => toNewJob(userId, raw, profile, prefs)));
+  if (!opts.companies) await setState(userId, "poolFilledAt", startedAt.toISOString());
+  return inserted;
 }
 
 // ---------- 2 & 3. One person's fetch ----------
