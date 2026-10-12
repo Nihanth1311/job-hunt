@@ -3,6 +3,9 @@
 A guided tour of this project: what each part does, why it's built that way, and the ideas
 behind it. Read it top to bottom once, then use it as a map. File links open the real code.
 
+For the two big flows step by step (one fetch from alarm to notification, and one code change
+from `git push` to live, including what a build is), see [END-TO-END.md](END-TO-END.md).
+
 At the end there's a **learning journal**: every meaningful change, the problem behind it, and
 the lesson. It grows as the project does.
 
