@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { and, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, notExists, sql } from "drizzle-orm";
 import { analyzeJob, dedupeKey, type RawJob } from "@/shared/core/analyze";
 import { cleanTitle, normalizeChars } from "@/shared/core/text";
 import { getDb, schema } from "../db";
@@ -254,12 +254,21 @@ export async function replaceJobDescription(userId: string, id: string, descript
     .where(and(eq(schema.jobs.id, id), eq(schema.jobs.userId, userId)));
 }
 
-/** Forget old jobs nobody acted on (everyone's feed, and the shared pool). Saved/applied jobs are kept forever. */
+/**
+ * Forget old jobs nobody acted on (everyone's feed, and the shared pool). Saved/applied jobs are
+ * kept forever, and so is any job you saved a resume for, so the resume stays attached to it.
+ */
 export async function cleanupOldJobs(): Promise<void> {
   const db = await getDb();
   const cutoff = new Date(Date.now() - MAX_AGE_DAYS * 86_400_000).toISOString();
   await db
     .delete(schema.jobs)
-    .where(and(inArray(schema.jobs.status, ["new", "skipped"]), lt(seenAt, cutoff)));
+    .where(
+      and(
+        inArray(schema.jobs.status, ["new", "skipped"]),
+        lt(seenAt, cutoff),
+        notExists(db.select({ one: sql`1` }).from(schema.resumeVersions).where(eq(schema.resumeVersions.jobId, schema.jobs.id))),
+      ),
+    );
   await db.delete(schema.rawJobs).where(lt(schema.rawJobs.postedAt, new Date(cutoff)));
 }

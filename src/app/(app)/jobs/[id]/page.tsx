@@ -11,6 +11,8 @@ import { JumpLink } from "@/client/components/layout/jump-link";
 import { TailorResume } from "@/client/components/resumes/tailor-resume";
 import { Badge, buttonClass, Card, CardTitle, CategoryBadge, cx, Icon, SalaryBadge, ScorePill } from "@/client/components/ui";
 import { experienceLabel, isInternship, parseExperience, salaryLabel } from "@/shared/core/classify";
+import { isLatex } from "@/shared/core/latex";
+import { scoreResume } from "@/shared/core/resume-score";
 import { siteLabel, SOURCE_LABEL, sourceLabel } from "@/shared/core/links";
 import type { Job } from "@/server/db/schema";
 import { formatDate, isOverdue, timeAgo } from "@/shared/format";
@@ -156,7 +158,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
             prefs={prefs}
             baseResumes={baseResumes}
             suggestedTrack={track}
-            versions={versions.map((v) => ({ id: v.id, label: v.label, track: v.track, createdAt: v.createdAt }))}
+            versions={versions.map((v) => ({ id: v.id, label: v.label, track: v.track, createdAt: v.createdAt, pdf: isLatex(v.content), score: scoreResume(job, v.content, profile, prefs) }))}
             isPreview={job.descriptionIsPreview}
           />
           </div>

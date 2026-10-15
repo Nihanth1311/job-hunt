@@ -11,6 +11,8 @@ import {
 import type { Application, ApplicationEvent, ResumeVersion } from "@/shared/types";
 import { formatDateTime, toDateInput } from "@/shared/format";
 import { APP_STATUSES, STATUS_LABEL, TRACK_LABEL, TRACKS, type AppStatus } from "@/shared/types";
+import { isLatex } from "@/shared/core/latex";
+import { ResumeButtons } from "../resumes/tailor-resume";
 import { Button, buttonClass, Card, CardTitle, cx, Icon, TrackBadge } from "../ui";
 
 export function ApplicationDetail({
@@ -180,9 +182,9 @@ export function ApplicationDetail({
                       <p className="mb-1 truncate text-sm font-medium">{r.label}</p>
                       <TrackBadge track={r.track} />
                     </div>
-                    <Link href={`/print/resume/${r.id}`} target="_blank" className={buttonClass("secondary", "sm")}>
-                      <Icon name="printer" className="size-3.5" /> PDF
-                    </Link>
+                    <div className="flex shrink-0 gap-1">
+                      <ResumeButtons id={r.id} title={r.label} pdf={isLatex(r.content)} />
+                    </div>
                   </li>
                 ))}
               </ul>

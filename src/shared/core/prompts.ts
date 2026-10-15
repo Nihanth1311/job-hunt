@@ -210,7 +210,9 @@ const LATEX_RULES = String.raw`=== LATEX RULES ===
 
 /**
  * The master tailoring prompt. One message in; Claude works through a recruiter's process in the
- * open (score, missing keywords, red flags), rewrites the experience for real, re-checks it the
+ * open (score, missing keywords, red flags), first adds job-aligned bullets to every role (1-2 in
+ * the current job, 1 in the internship that led to it, beginner-level rewording in other internships,
+ * listed first in each role), then rewrites the rest for real, re-checks it the
  * way an ATS and a rushed hiring manager would, and ends with the finished LaTeX resume.
  * The app keeps only the LaTeX block when you paste the reply back.
  */
@@ -235,7 +237,7 @@ function tailorPrompt(job: JobInput, a: Analysis, track: Track, baseResume: stri
 
   return `Act as a senior recruiter at ${company}, hiring for "${title}". You have read thousands of resumes for this exact role and you know what ${company}'s hiring managers and ATS screen for. Your goal: make me the strongest possible candidate for this job, with a final match score of 85/100 or higher. Take my resume (below) against the job description (below) through the four steps that follow, in order, and show the result of each step. Everything you need about me is in this message.
 
-${a.category === "frontend" ? "My background is frontend, which this role centres on, and I'm actively learning the rest of the stack" : "My background is mostly frontend, and I'm actively learning the rest of this stack"}, so close the gap aggressively but truthfully: the skills section includes everything the job asks for, experience bullets only describe work I really did, and job skills I haven't used yet go into my personal projects as small additions I'll build before applying (see Step 2).
+${a.category === "frontend" ? "My background is frontend, which this role centres on, and I'm actively learning the rest of the stack" : "My background is mostly frontend, and I'm actively learning the rest of this stack"}, so close the gap aggressively: the skills section includes everything the job asks for, EVERY role in my Experience is aligned to this job with new bullets (see "First" in Step 2; an Experience section that doesn't show the job's core skills is rejected at the first screen), and must-have skills that still have no home go into my personal projects as small additions I'll build before applying.
 
 DO NOT ask me any questions and do not wait for input: deliver all four steps in this one reply. If something is unclear or missing, use what's given here (my resume wins over anything else) and keep going. Keep Steps 1 and 3 tight: bullets, no essays.
 
@@ -246,15 +248,21 @@ Analyse my CURRENT resume against the job description, exactly as you would for 
 - 3 red flags a hiring manager would spot in under 10 seconds. Quote the line (or name the gap) and say why it costs me the interview.
 
 === STEP 2 · REWRITE MY EXPERIENCE ===
-Rewrite my Experience section (and Projects) for this job. This is a real rewrite, not polishing:
+FIRST, align every role in my Experience to this job. Do this before anything else in this step, and put these bullets FIRST in each role, because recruiters and the ATS read the top of each role first:
+- My current (or most recent) full-time job: add 1-2 NEW bullets that show this job's most important skills and responsibilities, written as work that fits that company, product and my level there.
+- The internship that led into that job (same company, e.g. "Intern (converted to full-time)"): add 1 NEW bullet that shows this job's skills, at intern level.
+- Every other internship: rewrite its bullets toward this job, at beginner level: exposure and assisting, not ownership ("Gained hands-on exposure to…", "Assisted the team in…", "Contributed to…"). Keep its real company, title and dates.
+- These bullets use the job's exact keywords. Give them no invented numbers: a concrete outcome instead of a metric. Keep them modest and believable for that role, company and seniority: they must survive an interviewer saying "tell me more about that".
+- List each one under "Experience bullets added" in Step 4, so I can prepare to talk about it.
+Then rewrite the rest of my Experience section (and Projects) for this job. This is a real rewrite, not polishing:
 - Rework every bullet. Keep one unchanged only if it already follows the XYZ formula, carries a result, and matches what this job cares about. Reorder, merge, split or replace bullets so the work most relevant to "${title}" comes first in each role.
 - Google's XYZ formula for every bullet: "Accomplished [X] as measured by [Y], by doing [Z]". Open with a strong action verb (past tense; present tense only for my current role), put the result early, one to two lines each.
-- Work all 5 missing keywords in naturally, in the job's exact wording, wherever my work genuinely involved them. Never stuff keywords or attach them to work I didn't do.
+- Work all 5 missing keywords in naturally, in the job's exact wording: into my existing bullets where my work involved them, and into the new bullets above. Never stuff a bullet with a list of keywords.
 - Remove all 3 red flags.
 - Use everything you know about me (resume, skills list, private context) to make bullets specific: what I built, the stack, who used it, the scale, the outcome. Turn duties into achievements.
 - Bridge to this role: frontend work usually includes backend-, platform- and DevOps-adjacent pieces (API design and integration, auth, caching, performance, testing, CI/CD, deployments, monitoring, data handling). Surface every such piece of my real work and describe it in this job's language, so my experience reads as directly relevant.
 - Use my projects (resume and private context) to show the job's skills I've used outside work. Lead each project with the skills this job wants most.
-- Must-have skills I have no evidence for at all (e.g. the job wants Azure and I've never used it): extend one of my real personal projects with a small, realistic piece of work using that skill, something I can build in a few hours (e.g. "Deployed it on Azure App Service with a GitHub Actions pipeline", "Added Redis caching for the API"), and write it as a PROJECT bullet, never in Experience. If I have no personal project that fits, add one small, realistic project in my area that uses those skills. Every such addition goes on the "Build before you apply" list in Step 3.
+- Must-have skills that still have no home after the new Experience bullets (e.g. the job wants Azure and nothing above covers it): extend one of my real personal projects with a small, realistic piece of work using that skill, something I can build in a few hours (e.g. "Deployed it on Azure App Service with a GitHub Actions pipeline", "Added Redis caching for the API"), and write it as a PROJECT bullet, never in Experience. If I have no personal project that fits, add one small, realistic project in my area that uses those skills. Every such addition goes on the "Build before you apply" list in Step 3.
 - [Y] must be real: a number from my resume or private context (users, %, latency, time saved, scale). Never invent a number. Where none exists, state a concrete, verifiable outcome instead.
 Show the rewritten Experience and Projects as plain bullets under each role.
 
@@ -271,12 +279,13 @@ Put everything together: my complete tailored resume, with every fix from Steps 
 % Target: ${title} at ${company}
 % Match score: <before>/100 -> <after>/100
 % Keywords added: <comma-separated>
+% Experience bullets added: <one short line each: role, and what the bullet claims>
 % Skills to brush up on before interviews: <comma-separated, or "none">
 % Build before applying: <one short line per project addition, or "nothing">
 
 === RULES FOR THE WHOLE RESUME ===
-- Honesty first: never invent employers, titles, dates or numbers. Experience bullets describe only work I really did; skills I'm still learning appear in Technical Skills and as project additions from the "Build before you apply" list.
-- Technical Skills: every skill, tool and technology the job asks for, in the job's exact wording and spelling, most important first. That includes skills not yet in my background (listed below as "to add"): I'm picking them up, so they go in Technical Skills (and the Summary if central to the role) and, where they're must-haves, into my projects as above; never into experience bullets.
+- Never invent employers, titles, dates or numbers. Experience may gain the new, job-aligned bullets described in Step 2 (1-2 in my current job, 1 in the internship that led to it, beginner-level rewording in other internships), and nothing beyond that; other skills I'm still learning appear in Technical Skills and as project additions from the "Build before you apply" list.
+- Technical Skills: every skill, tool and technology the job asks for, in the job's exact wording and spelling, most important first. That includes skills not yet in my background (listed below as "to add"): I'm picking them up, so they go in Technical Skills (and the Summary if central to the role), into the new Experience bullets where they fit that role, and otherwise into my projects as above.
 - Summary: 2-3 lines that position me for this exact role at ${company} (for example, a strong frontend engineer with hands-on skills across the rest of this stack), leading with my strongest matching result and naming the job's core technologies.
 - Show ownership, bias for action and delivering results through real examples, without buzzwords.
 - ONE page. Cut or merge the least relevant bullets (3-6 per role, 2-3 per project); drop school marks and coursework first if space is tight. Keep my degree and CGPA.

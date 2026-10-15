@@ -338,7 +338,7 @@ one database** (Neon): `DATABASE_URL` in `.env` points there, with `SCHEDULER=of
 your laptop doesn't run fetches too.
 
 > **Concept: migrations.** The database's shape (tables, columns) changes over time. Each change
-> is a numbered SQL file in [drizzle/](../drizzle/) (`0000_init.sql` … `0006_last_seen.sql`).
+> is a numbered SQL file in [drizzle/](../drizzle/) (`0000_init.sql` … `0007_resume_files.sql`).
 > On start, the app applies any it hasn't run yet, so the live database always matches the code.
 
 ---
@@ -346,6 +346,89 @@ your laptop doesn't run fetches too.
 ## 11. Learning journal
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
+
+### Tailoring: every role gets job-aligned bullets
+**Problem:** the tailoring prompt said experience bullets may only describe work already on the
+resume, so job skills went into Projects only. A screen that reads the Experience section found
+none of the job's core skills, and the resume was dropped at the first step.
+**Change** ([prompts.ts](../src/shared/core/prompts.ts), Step 2 "FIRST"): before anything else,
+Claude adds 1-2 job-aligned bullets to the current job, 1 to the internship that led into it, and
+rewords other internships toward the job at beginner level ("gained exposure to…"). They go
+first in each role (the top of a role is what gets read), use the job's exact keywords, carry no
+invented numbers, and are listed in a "% Experience bullets added" line so you can prepare to
+talk about each one. Company, title and dates never change.
+**Design choice:** the rules name kinds of role ("the internship that led into your current
+job"), not companies, because every invited user shares this prompt.
+**Lesson:** a rule like "only describe real work" can quietly defeat the goal (passing the
+screen). Check what each rule costs, and keep the trade-off visible to the person taking the risk.
+
+### Resume score: rated like an ATS and a recruiter
+**What:** on a job's page, a resume gets a score (0-100) as you paste it, with the breakdown,
+the must-have skills colour-coded, your experience against the job's, and recruiter-style tips.
+**Why it changed:** the first version only counted keywords. Screening software and recruiters
+look at more: *must-haves* weigh more than nice-to-haves, a skill **used in a job** beats one
+only **listed**, recent work counts more, and years of experience are their own check.
+**The formula** ([resume-score.ts](../src/shared/core/resume-score.ts)), out of 100:
+- **Skills 45:** each skill the job names gets a weight: 3 when it's a must-have (under a
+  "Requirements" heading, in the title, or said with "must/strong"), 1 when it's "nice to have /
+  a plus", 2 otherwise, a little more when repeated. The resume earns 100% of it for a skill used
+  in the most recent job, 90% in an older job, 80% in a project, 45% if only in the Skills list.
+  A skill implied by another (PostgreSQL → SQL, Django → Python) earns 85% of that, with a tip
+  to write the exact word too, because older ATS (Taleo, iCIMS) only match exact words.
+- **Experience 20:** years **read from the dates in the resume** (overlaps counted once,
+  internships at half), with relevant years (jobs using this job's skills, or the same kind of
+  role) counting fully and the rest a third, against the years the job asks for.
+- **Role 10:** is the resume the same kind of role (backend, data…)? Related roles get partial credit.
+- **Impact 10:** bullets with numbers (%, users, ms, ₹) and strong verbs.
+- **ATS-readable 10:** email, phone, standard headings, sensible length. **Education 5:** a degree when the job asks for one.
+- **Knockouts:** missing most must-haves, or under half the required years, caps the score at
+  45 (both: 30), like the pass/fail filters ATS run before ranking.
+**Salary isn't in it:** most postings don't state one. **Tested** on one resume against three
+jobs: a backend job it fits scored 95, a frontend job 60, a senior data job 30.
+**Limits:** it only knows skills in the app's list (Scala, Snowflake aren't in it yet), and it
+can't judge writing quality the way an AI model or a person can.
+**Lesson:** when you can't use a model, encode what experts actually look at (importance,
+evidence, recency, hard filters) instead of counting words.
+
+### Resumes as real PDFs: upload, LaTeX, preview
+**What:** the Resumes page was rebuilt around one **Add resume** panel (upload a PDF, paste LaTeX,
+or write it with Claude) and compact cards showing each resume's first page. **Preview** opens
+every page; **Download** saves a file named like *Your Name - Backend Developer.pdf*.
+**How:**
+- **LaTeX → PDF** goes to a free online LaTeX compiler (latex.ytotech.com; texlive.net if that
+  one can't be reached), the same kind of service as Overleaf. A real TeX install is ~4 GB and
+  wouldn't fit Render's free server. A mistake that stops the PDF (e.g. a missing package) is
+  reported with its line number and nothing is saved, unless you choose *Save anyway*.
+- **Uploaded PDFs** are checked by their first bytes (`%PDF-`), not by the name the browser
+  reports, and their text is pulled out (with `unpdf`) so Claude can still read them.
+- **Storage:** a new `resume_files` table ([0007_resume_files.sql](../drizzle/0007_resume_files.sql))
+  holds the bytes (`bytea`), *beside* `resume_versions` rather than in it, so listing resumes
+  never pulls files over Neon's network (see the next entry for why that matters). LaTeX made
+  before this change is compiled the first time someone looks at it, then kept.
+- **Preview** draws the PDF with PDF.js onto a `<canvas>` instead of using the browser's
+  built-in viewer, which doesn't work inside a page on Android phones.
+- **Caching:** a resume never changes under its id (an edit saves a new row), so the PDF
+  address tells the browser to keep it for a year (`immutable`): the thumbnail, the preview and
+  later visits download it once.
+
+[resume-files.ts](../src/server/services/resume-files.ts),
+[api/resumes](../src/app/api/resumes/route.ts), [pdf-view.tsx](../src/client/components/resumes/pdf-view.tsx),
+[add-resume.tsx](../src/client/components/resumes/add-resume.tsx)
+**Bug found while testing:** the preview closed itself a moment after opening. In development,
+React runs each effect twice on purpose (mount, clean up, mount) to expose this kind of bug.
+The cleanup called `dialog.close()`, whose `close` event arrived *after* the second mount and
+told React to remove the preview. **Fix:** don't close on cleanup; removing the element is enough.
+**Attached to the job, for good:** a tailored resume always pointed at its job (`job_id`), but
+the daily cleanup deletes old jobs you never saved, which cut that link (`ON DELETE SET NULL`).
+The cleanup now skips any job that has a resume (`NOT EXISTS`), and the job page's list has
+Preview, Download and Delete right there.
+**Downloads you can see:** a plain download link gives no sign on most phones. The Download
+button now fetches the file itself (`fetch` → `Blob` → a temporary link with `download="…"`), so
+it can show *Downloading…*, pop a check, and slide up a notice with the file name. The server
+names the file `Your_Name_Role_Company.pdf` (`Content-Disposition`), and the button asks with
+`cache: "no-store"` so an old cached copy can't come back under an old name.
+**Lessons:** never trust a file's name or type, look at its bytes. Keep big blobs out of the
+rows you list. And when an effect "undoes" something, ask what events the undo fires.
 
 ### Neon's network allowance at 95%
 **Problem:** Neon's free plan allows **5 GB a month** of data leaving the database; running out

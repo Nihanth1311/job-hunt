@@ -6,9 +6,13 @@ import { deleteResumeVersion, saveResumeVersion } from "@/server/actions/resumes
 import { analyzeJob } from "@/shared/core/analyze";
 import { extractLatex, isLatex } from "@/shared/core/latex";
 import { buildJobPrompt, type JobInput } from "@/shared/core/prompts";
+import { scoreResume, type ResumeScore } from "@/shared/core/resume-score";
 import { formatDateTime } from "@/shared/format";
 import { TRACK_LABEL, TRACK_TITLE, TRACKS, type Preferences, type Profile, type Track } from "@/shared/types";
 import { useSendToClaude } from "./claude";
+import { DownloadButton } from "./download-button";
+import { PreviewButton } from "./resume-preview";
+import { ResumeScoreCard, ScoreBadge, ScoreHint } from "./resume-score-view";
 import { Badge, Button, buttonClass, Callout, Card, cx, Icon } from "../ui";
 
 export interface ResumeVersionItem {
@@ -16,6 +20,10 @@ export interface ResumeVersionItem {
   label: string;
   track: string;
   createdAt: Date;
+  /** LaTeX (has a PDF), or plain text (printed instead). */
+  pdf: boolean;
+  /** How well it fits this job (skills shown + experience). */
+  score: ResumeScore;
 }
 
 /**
@@ -60,6 +68,11 @@ export function TailorResume({
     [job, analysis, track, base, profile],
   );
   const defaultName = `${TRACK_LABEL[track]} · ${job.company}`;
+  // Scored live as you paste, before you save.
+  const pastedScore = useMemo(
+    () => (isLatex(result) || result.trim().length > 200 ? scoreResume(job, isLatex(result) ? extractLatex(result) : result, profile, prefs) : null),
+    [result, job, profile, prefs],
+  );
 
   const save = () =>
     start(async () => {
@@ -238,6 +251,7 @@ export function TailorResume({
             }}
             placeholder={"% Target: " + TRACK_TITLE[track] + "\n\\documentclass[letterpaper,10.5pt]{article}\n…\n\\end{document}"}
           />
+          {pastedScore && <ResumeScoreCard result={pastedScore} isPreview={isPreview} />}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <input
               className="field max-w-64 flex-1"
@@ -252,10 +266,7 @@ export function TailorResume({
           </div>
           {savedId && (
             <p className="mt-3 inline-flex flex-wrap items-center gap-2 text-sm text-good">
-              <Icon name="check" className="size-4" strokeWidth={2.5} /> Saved.
-              <Link href={`/print/resume/${savedId}`} target="_blank" className="font-medium text-accent hover:underline">
-                Open it (PDF / Overleaf)
-              </Link>
+              <Icon name="check" className="size-4" strokeWidth={2.5} /> Saved and attached to this job, below.
             </p>
           )}
 
@@ -265,16 +276,18 @@ export function TailorResume({
               <ul className="divide-y divide-line rounded-xl border border-line">
                 {versions.map((v) => (
                   <li key={v.id} className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{v.label}</p>
-                      <p className="text-xs text-muted">
-                        {TRACK_LABEL[v.track as Track] ?? v.track} · {formatDateTime(v.createdAt)}
-                      </p>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <ScoreBadge score={v.score.score} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{v.label}</p>
+                        <p className="text-xs text-muted">
+                          {TRACK_LABEL[v.track as Track] ?? v.track} · {formatDateTime(v.createdAt)}
+                        </p>
+                        <ScoreHint result={v.score} />
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Link href={`/print/resume/${v.id}`} target="_blank" className={buttonClass("secondary", "sm")}>
-                        <Icon name="printer" className="size-3.5" /> PDF
-                      </Link>
+                    <div className="flex flex-wrap gap-1">
+                      <ResumeButtons id={v.id} title={v.label} pdf={v.pdf} />
                       <Button
                         size="sm"
                         variant="ghost"
@@ -337,4 +350,21 @@ function Instruction({ n, children }: { n: string; children: React.ReactNode }) 
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="rounded-md border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-ink">{children}</kbd>;
+}
+
+/** Preview and Download for a saved resume; a plain-text one opens its print page instead. */
+export function ResumeButtons({ id, title, pdf }: { id: string; title: string; pdf: boolean }) {
+  if (!pdf) {
+    return (
+      <Link href={`/print/resume/${id}`} target="_blank" className={buttonClass("secondary", "sm")}>
+        <Icon name="printer" className="size-3.5" /> Print
+      </Link>
+    );
+  }
+  return (
+    <>
+      <PreviewButton id={id} title={title} />
+      <DownloadButton id={id} />
+    </>
+  );
 }

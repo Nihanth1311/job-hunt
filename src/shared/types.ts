@@ -20,6 +20,9 @@ export const TRACK_TITLE: Record<Track, string> = {
   security: "Cybersecurity Engineer",
 };
 
+/** How a saved resume becomes a PDF: the file you uploaded, LaTeX we compile, or plain text you print. */
+export type ResumeKind = "upload" | "latex" | "text";
+
 export const CATEGORIES = ["fullstack", "frontend", "backend", "devops", "data", "security", "sde", "internship", "other"] as const;
 export type Category = (typeof CATEGORIES)[number];
 

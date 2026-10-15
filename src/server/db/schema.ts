@@ -3,6 +3,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -15,6 +16,11 @@ import {
 } from "drizzle-orm/pg-core";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
+/** Raw file bytes. PGlite hands back a Uint8Array and postgres-js a Buffer; both become a Buffer. */
+const bytea = customType<{ data: Buffer; driverData: Uint8Array }>({
+  dataType: () => "bytea",
+  fromDriver: (v) => Buffer.from(v),
+});
 
 // ---------- Accounts ----------
 
@@ -194,6 +200,21 @@ export const resumeVersions = pgTable("resume_versions", {
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
+/**
+ * The PDF of a resume: the file you uploaded, or your LaTeX compiled once and kept.
+ * Its own table so lists of resumes never pull the file bytes over the network.
+ */
+export const resumeFiles = pgTable("resume_files", {
+  resumeId: text("resume_id")
+    .primaryKey()
+    .references(() => resumeVersions.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  source: text("source").notNull(), // upload | latex
+  fileName: text("file_name").notNull().default(""),
+  pdf: bytea("pdf").notNull(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
 /** Key/value store for each person's profile, preferences and state. user_id "" holds app-wide state. */
 export const settings = pgTable(
   "settings",
@@ -224,5 +245,6 @@ export type NewJob = typeof jobs.$inferInsert;
 export type Application = typeof applications.$inferSelect;
 export type ApplicationEvent = typeof applicationEvents.$inferSelect;
 export type ResumeVersion = typeof resumeVersions.$inferSelect;
+export type ResumeFile = typeof resumeFiles.$inferSelect;
 export type FetchRun = typeof fetchRuns.$inferSelect;
 export type User = typeof users.$inferSelect;

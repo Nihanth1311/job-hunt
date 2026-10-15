@@ -82,6 +82,15 @@ export async function POST(req: Request) {
   }));
   if (resumes.length) added.resumeVersions = (await db.insert(schema.resumeVersions).values(resumes).onConflictDoNothing().returning()).length;
 
+  // Uploaded resume PDFs (base64 in the file), only for resumes that are now yours.
+  const myResumes = new Set(
+    (await db.select({ id: schema.resumeVersions.id }).from(schema.resumeVersions).where(eq(schema.resumeVersions.userId, uid))).map((r) => r.id),
+  );
+  const files = revive<Omit<typeof schema.resumeFiles.$inferInsert, "pdf"> & { pdf: unknown }>(backup.resumeFiles)
+    .filter((f) => typeof f.pdf === "string" && myResumes.has(f.resumeId))
+    .map((f) => ({ ...f, userId: uid, pdf: Buffer.from(f.pdf as string, "base64") }));
+  if (files.length) await db.insert(schema.resumeFiles).values(files).onConflictDoNothing();
+
   // Score everything against the (possibly restored) profile.
   await rescoreAll(uid);
   revalidatePath("/", "layout");

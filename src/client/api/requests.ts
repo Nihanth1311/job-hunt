@@ -38,3 +38,29 @@ export async function restoreBackup(fileText: string): Promise<RestoreAnswer> {
   const res = await fetch(API.importData, { method: "POST", headers: { "content-type": "application/json" }, body: fileText });
   return { ok: res.ok, status: res.status, body: await res.json() };
 }
+
+/** Upload a resume PDF as the base resume for a role type. */
+export async function uploadResume(file: File, track: string): Promise<{ id: string; noText: boolean } | { error: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("track", track);
+  try {
+    const res = await fetch(API.resumes, { method: "POST", body: form });
+    const body = (await res.json()) as { id: string; noText: boolean } | { error: string };
+    return res.ok || "error" in body ? body : { error: `Couldn't upload (${res.status}).` };
+  } catch {
+    return { error: "Couldn't reach the server. Check your connection and try again." };
+  }
+}
+
+/** A resume's PDF bytes, or the reason there isn't one (e.g. the LaTeX has a mistake). */
+export async function getResumePdf(id: string): Promise<{ pdf: Uint8Array } | { error: string }> {
+  try {
+    const res = await fetch(API.resumePdf(id));
+    if (res.ok) return { pdf: new Uint8Array(await res.arrayBuffer()) };
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { error: body.error ?? `Couldn't load the PDF (${res.status}).` };
+  } catch {
+    return { error: "Couldn't reach the server." };
+  }
+}

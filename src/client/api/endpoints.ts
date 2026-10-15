@@ -15,6 +15,10 @@ export const API = {
   exportData: "/api/export",
   /** POST (JSON body): restore from an "Export my data" file. */
   importData: "/api/import",
+  /** POST (form: file, track): upload a resume PDF. */
+  resumes: "/api/resumes",
+  /** GET: one resume as a PDF (LaTeX is compiled the first time). Add ?download=1 to save it. */
+  resumePdf: (id: string, download = false) => `/api/resumes/${encodeURIComponent(id)}/pdf${download ? "?download=1" : ""}`,
   /** GET: start Google sign-in; comes back to `next` afterwards. */
   googleSignIn: (next: string) => `/api/auth/google?next=${encodeURIComponent(next)}`,
   /** POST (form): sign in without Google, on your own computer during development only. */

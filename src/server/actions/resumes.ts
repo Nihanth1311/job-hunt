@@ -5,29 +5,39 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createApplication, ownApplication } from "../services/applications";
 import { requireUser } from "../auth";
+import { isLatex } from "@/shared/core/latex";
 import { looksLikeCompanySite } from "@/shared/core/links";
 import { getDb, schema } from "../db";
 import { insertJobs, toNewJob } from "../services/jobs";
 import { getJob } from "../services/queries";
+import { compileLatex, saveResumeFile } from "../services/resume-files";
 import { getPreferences, getProfile } from "../services/settings";
 import { TRACKS, type Track } from "@/shared/types";
 
 const refreshAll = () => revalidatePath("/", "layout");
 const asTrack = (s: unknown): Track => (TRACKS.includes(s as Track) ? (s as Track) : "fullstack");
 
-export async function saveBaseResume(track: string, content: string) {
+/**
+ * Save a base resume. LaTeX is compiled to a PDF first: if it has a mistake nothing is saved
+ * and the error comes back, unless `anyway` (e.g. the compiler is down; the PDF is made later).
+ */
+export async function saveBaseResume(
+  track: string,
+  content: string,
+  opts: { anyway?: boolean } = {},
+): Promise<{ id: string } | { error: string } | null> {
   const { id: uid } = await requireUser();
-  if (!content.trim()) return;
+  const text = content.trim();
+  if (!text) return null;
+  const compiled = isLatex(text) ? await compileLatex(text) : null;
+  if (compiled && "error" in compiled && !opts.anyway) return { error: compiled.error };
+
   const db = await getDb();
-  await db.insert(schema.resumeVersions).values({
-    id: randomUUID(),
-    userId: uid,
-    track: asTrack(track),
-    label: "Base",
-    content: content.trim(),
-    isBase: true,
-  });
+  const id = randomUUID();
+  await db.insert(schema.resumeVersions).values({ id, userId: uid, track: asTrack(track), label: "Base", content: text, isBase: true });
+  if (compiled && "pdf" in compiled) await saveResumeFile(uid, id, { source: "latex", fileName: "Resume.pdf", pdf: compiled.pdf });
   refreshAll();
+  return { id };
 }
 
 export async function saveResumeVersion(input: {
@@ -60,6 +70,11 @@ export async function saveResumeVersion(input: {
     jobId,
     applicationId,
   });
+  // Make the PDF now, so Preview and Download are instant. A mistake isn't fatal: the PDF is tried again on Preview.
+  if (isLatex(input.content)) {
+    const out = await compileLatex(input.content.trim());
+    if ("pdf" in out) await saveResumeFile(uid, id, { source: "latex", fileName: "Resume.pdf", pdf: out.pdf });
+  }
   refreshAll();
   return id;
 }

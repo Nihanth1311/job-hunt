@@ -351,6 +351,8 @@ export async function listTailoredResumes(uid: string) {
       jobId: schema.resumeVersions.jobId,
       jobTitle: schema.jobs.title,
       company: schema.jobs.company,
+      // Same test as isLatex(), done in the database so the list doesn't download every resume.
+      isLatex: sql<boolean>`(strpos(${schema.resumeVersions.content}, '\\documentclass') > 0)`,
     })
     .from(schema.resumeVersions)
     .leftJoin(schema.jobs, eq(schema.resumeVersions.jobId, schema.jobs.id))

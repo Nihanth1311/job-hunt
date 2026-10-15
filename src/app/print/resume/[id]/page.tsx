@@ -23,9 +23,9 @@ export default async function PrintResumePage({ params }: PageProps<"/print/resu
       <div className="mx-auto min-h-screen max-w-4xl px-4 py-8">
         <h1 className="text-xl font-semibold tracking-tight">{resume.label}</h1>
         <p className="mb-5 mt-1 text-sm text-muted">
-          LaTeX resume. Open it in Overleaf to get the PDF (free account), or copy the code into any LaTeX editor.
+          LaTeX resume. Download it as a PDF, or open it in Overleaf to change it.
         </p>
-        <LatexResume code={resume.content} name={`${resume.label}.tex`} />
+        <LatexResume id={resume.id} code={resume.content} name={`${resume.label}.tex`} />
       </div>
     );
   }
