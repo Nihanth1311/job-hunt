@@ -6,7 +6,7 @@ A private, single-owner job search website. It finds fresh jobs in India, matche
 - **Resume & Claude:** open a job or paste any job description. The site picks the right resume (a DevOps job gets your DevOps resume), builds a ready-made prompt, and **opens Claude** so you can chat and refine. Paste the final version back to keep it with the job and print it as a PDF.
 - **Tracker:** a drag-and-drop board (Saved → Applied → Assessment → Interview → Offer / Rejected), with notes, a timeline and automatic follow-up dates.
 - **Alerts:** an optional Telegram bot sends a 9 AM digest and instant alerts for strong matches.
-- **Yours only:** runs on your laptop or your own free server. A password lock, no search-engine indexing, and one-click export of all your data.
+- **Yours only:** runs on your laptop or your own free server. Invite-only Google sign-in, no search-engine indexing, and one-click export of all your data.
 
 Everything runs on free tiers today, and each piece can be swapped for a paid one later without rewriting anything (see [docs/DEPLOY.md](docs/DEPLOY.md#when-you-want-to-scale-or-pay-for-more)).
 
@@ -48,7 +48,7 @@ npx next telemetry disable
    - `http://localhost:3000/api/auth/google/callback` (your laptop)
    - `https://<your-domain>/api/auth/google/callback` (once it's online; also set `APP_URL=https://<your-domain>`)
 4. Put the client ID and secret in `.env` as `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, and your Gmail as `ADMIN_EMAIL`. Restart.
-5. Sign in. Your first sign-in as admin takes over all existing data. Invite others from **Admin** (sidebar); only invited Gmail addresses get in, up to `MAX_USERS` (15).
+5. Sign in. Your first sign-in as admin takes over all existing data. Invite others from **Admin** (sidebar); only invited Gmail addresses get in, up to `MAX_USERS` people (15 by default; `render.yaml` sets 20).
 
 Each person's jobs, verdicts, profile, resumes, tracker and keys are private to them. Removing someone on **People** signs them out everywhere at once (and can delete their data).
 

@@ -158,7 +158,7 @@ What happens when you open `/jobs` on your phone:
    (`?fit=ready&sort=recent`) and asks [queries.ts](../src/server/services/queries.ts) for *your* jobs.
    Every query includes `WHERE user_id = you`.
 4. The server sends finished HTML. Your phone shows it. Buttons like **Save** call *server
-   actions* in [actions/](../src/actions/), which check who you are again before changing
+   actions* in [server/actions/](../src/server/actions/), which check who you are again before changing
    anything.
 
 > **Concept: never trust the client.** Anything from the browser can be faked. That's why every
@@ -246,7 +246,7 @@ up.
 
 - **Sign-in** is Google OAuth (authorization code + PKCE) in
   [auth/google.ts](../src/server/auth/google.ts). Google proves who you are; we never see a password.
-- **Invite-only**: an admin adds emails on the Admin page, so only those can get in. Maximum 20.
+- **Invite-only**: an admin adds emails on the Admin page, so only those can get in. At most `MAX_USERS` people (15 by default, 20 on Render).
 - **Sessions**: a random token in an `httpOnly` cookie, which JavaScript can't read, so a
   malicious script can't steal it. The database stores only its **SHA-256 hash**, so a leaked
   database can't be used to sign in.
