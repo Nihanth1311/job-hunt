@@ -412,6 +412,17 @@ with a second level ("Website" → "Barclays Careers Website"), and answers word
 yours ("Company careers site" = "Career Site" = "Corporate Website"). Long questions are matched
 on the sentence that actually asks ("Have you worked at Barclays? If you're an employee, apply
 internally." is about the first sentence).
+**Then, from a real Barclays form:** ten screening questions (statutory auditor, anything
+preventing you joining, adjustments, regulator, dismissal, "happy to continue?", connected
+persons) became Profile questions too: the usual ones pre-set (No to all the "anything to declare?"
+ones), and the personal one (adjustments) left for you to set once. "Are you happy to continue with your application?"
+is answered from your setting rather than treated as an agreement. Yes/No options worded as
+sentences ("I do not require sponsorship") are understood, and with several kinds of yes, a
+citizen's is chosen. Workday dropdowns had shown up on the site as just "Select One Required":
+the widget's own caption had been taken for the question; the question box's heading comes first
+now. **Resumes:** role resumes saved as text (Markdown from Claude) couldn't be uploaded, so
+Autofill left them out; now any text resume is laid out in the LaTeX style and made into a PDF
+the first time it's needed, and kept.
 **Lesson:** a form's question is rarely worded like yours. Match meaning (groups of words that
 say the same thing) rather than exact text, and give people sensible defaults instead of a blank
 form to fill.

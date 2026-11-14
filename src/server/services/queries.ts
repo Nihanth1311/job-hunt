@@ -361,9 +361,9 @@ export async function listTailoredResumes(uid: string) {
 }
 
 /**
- * Every resume that can go on an application as a PDF: uploaded PDFs, and LaTeX (compiled when
- * first needed). Plain-text resumes can't be uploaded, so they're left out. Contents stay in the
- * database: only the facts the list needs travel.
+ * Every resume, for putting on an application as a PDF: uploaded PDFs as they are; LaTeX and
+ * text resumes become PDFs the first time they're needed. Contents stay in the database: only
+ * the facts the list needs travel.
  */
 export async function pdfResumes(uid: string) {
   const db = await getDb();
@@ -384,7 +384,7 @@ export async function pdfResumes(uid: string) {
     .leftJoin(schema.jobs, eq(schema.resumeVersions.jobId, schema.jobs.id))
     .where(eq(schema.resumeVersions.userId, uid))
     .orderBy(desc(schema.resumeVersions.createdAt));
-  return rows.filter((r) => r.isLatex || r.hasFile);
+  return rows;
 }
 
 export async function getResume(uid: string, id: string) {

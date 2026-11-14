@@ -64,15 +64,16 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const target = applyTarget(job);
   const trackName = (t: string) => TRACK_LABEL[t as Track] ?? t;
   const day = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  const text = (r: { isLatex: boolean; hasFile: boolean }) => (r.isLatex || r.hasFile ? "" : " · text, made into a PDF");
   const autofillResumes = [
-    ...usable.filter((r) => r.jobId === job.id).map((r) => ({ group: "Made for this job", id: r.id, label: `${r.label || "Tailored"} · ${day(r.createdAt)}` })),
+    ...usable.filter((r) => r.jobId === job.id).map((r) => ({ group: "Made for this job", id: r.id, label: `${r.label || "Tailored"} · ${day(r.createdAt)}${text(r)}` })),
     ...usable
       .filter((r) => r.isBase)
       .sort((a, b) => Number(b.track === track) - Number(a.track === track))
-      .map((r) => ({ group: "Base resumes", id: r.id, label: `${trackName(r.track)}${r.label && r.label !== "Base" ? ` · ${r.label}` : ""} · ${day(r.createdAt)}` })),
+      .map((r) => ({ group: "Base resumes", id: r.id, label: `${trackName(r.track)}${r.label && r.label !== "Base" ? ` · ${r.label}` : ""} · ${day(r.createdAt)}${text(r)}` })),
     ...usable
       .filter((r) => !r.isBase && r.jobId !== job.id)
-      .map((r) => ({ group: "Made for other jobs", id: r.id, label: `${r.label || trackName(r.track)}${r.company ? ` · ${r.company}` : ""} · ${day(r.createdAt)}` })),
+      .map((r) => ({ group: "Made for other jobs", id: r.id, label: `${r.label || trackName(r.track)}${r.company ? ` · ${r.company}` : ""} · ${day(r.createdAt)}${text(r)}` })),
   ];
   const followUpDue = application?.followUpAt && !["offer", "rejected", "saved"].includes(application.status) ? application.followUpAt : null;
 

@@ -125,6 +125,13 @@ export const ANSWER_FIELDS: AnswerField[] = [
   { key: "governmentOfficial", label: "A government official, or related to one?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
   { key: "criminalRecord", label: "Any criminal conviction?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
   { key: "backgroundCheck", label: "OK with a background check?", group: "Usual yes/no questions", options: YES_NO, default: "Yes" },
+  { key: "happyToContinue", label: "“Happy to continue with your application?” (ID match, screening)", group: "Usual yes/no questions", options: YES_NO, default: "Yes" },
+  { key: "preventEmployment", label: "Any reason you can't take the job (legal, conflict of interest, contract)?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
+  { key: "auditorEmployed", label: "Worked for the company's auditor (e.g. KPMG) in the last 2 years?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
+  { key: "regulatoryAction", label: "Ever investigated or disciplined by a regulator?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
+  { key: "dismissed", label: "Ever dismissed for misconduct?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
+  { key: "needsAdjustment", label: "Need an adjustment (accommodation) during hiring?", group: "Usual yes/no questions", options: YES_NO, hint: "Your own answer: no pre-set." },
+  { key: "connectedPerson", label: "Related to a company stakeholder (client, supplier, regulator, PEP)?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
   { key: "willingToRelocate", label: "Willing to relocate?", group: "Usual yes/no questions", options: YES_NO },
   { key: "openToOffice", label: "OK with hybrid or in-office work?", group: "Usual yes/no questions", options: YES_NO },
   { key: "openToShifts", label: "OK with shifts (night or rotational)?", group: "Usual yes/no questions", options: YES_NO },
@@ -148,7 +155,15 @@ export const ANSWER_FIELDS: AnswerField[] = [
   { key: "postalCode", label: "PIN code", group: "Address", placeholder: "500081" },
   { key: "state", label: "State", group: "Address", placeholder: "Telangana" },
 
-  { key: "gender", label: "Gender", group: "Diversity (optional)", options: ["Male", "Female", "Non-binary", DECLINE] },
+  { key: "gender", label: "Gender / gender identity", group: "Diversity (optional)", options: ["Male", "Female", "Non-binary", DECLINE] },
+  {
+    key: "ethnicity",
+    label: "Race / ethnicity",
+    group: "Diversity (optional)",
+    options: ["Asian", "White", "Black or African American", "Hispanic or Latino", "Two or more races", DECLINE],
+    hint: "Matched to each form's wording, e.g. “Asian (India)”. Empty: “decline” is chosen.",
+  },
+  { key: "orientation", label: "Sexual orientation", group: "Diversity (optional)", options: ["Heterosexual / straight", "Gay or lesbian", "Bisexual", DECLINE], hint: "Empty: “decline” is chosen." },
   { key: "disability", label: "Disability", group: "Diversity (optional)", options: ["No", "Yes", DECLINE] },
 ];
 
@@ -310,6 +325,9 @@ function adult(dob: string): string {
   return Date.now() - born >= 18 * 365.25 * 86_400_000 ? "Yes" : "No";
 }
 
+/** "Are you happy to continue with your application?": answered from your Profile setting, not treated as an agreement. */
+const CONTINUE = /(happy|wish|want|like|willing) to (continue|proceed) with (your|the|this) application|(continue|proceed) with (your|the|this) application/;
+
 /** Agreements, consent and attestations: never answered for you. */
 const AGREEMENT = /\b(i agree|agree to|consent|acknowledge|certify|attest|i understand|terms (and|&) conditions|privacy (policy|notice)|declare that|confirm that)\b/;
 
@@ -331,8 +349,22 @@ const RULES: Rule[] = [
   P(/linkedin/, "linkedin"),
   P(/github/, "github"),
   P(/portfolio|personal (website|site)|^website|other website|\bblog\b/, "portfolio"),
-  // The usual yes/no questions, worded every way companies word them.
+  // Diversity questions: your answers when you've given them, else the form's "decline" option.
+  P(/hispanic|latin[oa]/, (c) => {
+    const e = answerOf(c.fields, "ethnicity");
+    return !e || e === DECLINE ? DECLINE : /hispanic|latin/i.test(e) ? "Yes" : "No";
+  }),
+  P(/\brace\b|ethnic/, (c) => answerOf(c.fields, "ethnicity") || DECLINE),
+  P(/sexual orientation|\borientation\b|sexuality/, (c) => answerOf(c.fields, "orientation") || DECLINE),
+  P(/veteran/, () => DECLINE),
+  // The usual yes/no questions, worded every way companies word them. Specific before general.
   B(/date of birth|\bdob\b|birth ?date|born on/, "dob"),
+  B(/statutory auditor|external auditor|(employed|worked) .{0,60}\b(kpmg|deloitte|pwc|pricewaterhouse|ernst|\bey\b)\b/, "auditorEmployed"),
+  B(/\bstakeholder|connected person/, "connectedPerson"),
+  B(/reason .{0,40}prevent|prevent you .{0,40}(taking up|joining|employment|starting)|stop you (from )?(taking|joining)/, "preventEmployment"),
+  B(/adjustment|accommodation|accessib|disabilit.{0,30}support/, "needsAdjustment"),
+  B(/regulator|regulatory body|disciplined|subject to (an )?investigation/, "regulatoryAction"),
+  B(/dismissed|gross misconduct|terminated (for|due)|let go for/, "dismissed"),
   P(/\b18\b.{0,20}(years|older|age)|legal (working )?age|age of majority/, (c) => adult(answerOf(c.fields, "dob"))),
   B(/(previously|ever|before|formerly|in the past|prior).{0,40}(work|employ|consult|intern)|(work|employ|consult).{0,40}(before|previously|in the past)|former (employee|worker|intern)|ex employee|rehire/, "workedHereBefore"),
   B(/(previously|ever|already|before) appl(y|ied)|appl(y|ied) .{0,40}(before|previously|in the past|last \d+ months)/, "appliedBefore"),
@@ -370,7 +402,6 @@ const RULES: Rule[] = [
 ];
 
 /** US diversity questions (race, veteran, ethnicity): the "decline" option, whatever the form calls it. */
-const DECLINE_ONLY = /\brace\b|ethnic|hispanic|latin[oa]|veteran/;
 const DECLINE_OPTION = /decline|prefer not|don.?t (wish|want)|do not (wish|want)|not to (say|disclose|answer|identify)|rather not|choose not/i;
 
 export interface Decision {
@@ -398,9 +429,9 @@ export function decide(
   // ending in "?", else the last sentence), and only then at the whole text.
   const asks = questionParts(label).map((p) => normQuestion(p, ctx.company)).filter(Boolean);
   const q = asks[0] ?? n;
+  if (asks.some((a) => CONTINUE.test(a))) return { value: answerOf(ctx.bank.fields, "happyToContinue") || null, from: "bank" };
   if (asks.some((a) => AGREEMENT.test(a))) return { value: null, agreement: true };
   if (learned !== undefined) return { value: learned, from: "learned" };
-  if (DECLINE_ONLY.test(q)) return { value: DECLINE, from: "bank" };
   for (const text of [...asks, n]) {
     for (const rule of RULES) {
       if (!rule.re.test(text)) continue;
@@ -419,9 +450,9 @@ export function decide(
  */
 function questionParts(label: string): string[] {
   if (label.length < 120) return [label];
-  const parts = label.split(/(?<=[.?!])\s+/).filter((p) => p.trim());
-  const asked = parts.find((p) => p.trim().endsWith("?"));
-  return [...new Set([asked, parts[parts.length - 1]].filter((p): p is string => !!p))];
+  const parts = label.split(/(?<=[.?!])\s+|\n+/).filter((p) => p.trim().length > 3);
+  const asked = parts.find((p) => /\?\W*$/.test(p.trim()));
+  return [...new Set([asked, parts[0], parts[parts.length - 1]].filter((p): p is string => !!p))];
 }
 
 /** A remembered question worded a little differently ("…before?" vs "…previously?"). */
@@ -476,8 +507,12 @@ export function pickOption(answer: string, options: string[]): string | null {
   const yes = /^(yes|y|true)\b/.test(a);
   const no = /^(no|n|false)\b/.test(a);
   if (yes || no) {
-    const word = yes ? /^yes\b/ : /^no\b/;
-    return opts.find((o) => word.test(simple(o))) ?? null;
+    // "No" is also "I do not require…", "None", "Not applicable"; "Yes" is also "I do", "I am".
+    const NO_WORDS = /^(no|none|not|n a|i (do|am|have|would) not|i don t|i m not|i have no)\b/;
+    const YES_WORDS = /^(yes|i (do|am|have|require|would)|i m)\b/;
+    const matches = opts.filter((o) => (yes ? YES_WORDS.test(simple(o)) && !NO_WORDS.test(simple(o)) : NO_WORDS.test(simple(o))));
+    // Several kinds of yes ("Yes - I am a citizen", "Yes - I have a visa"): a citizen's answer first.
+    return matches.find((o) => /citizen/i.test(o)) ?? matches[0] ?? null;
   }
   const starts = opts.find((o) => simple(o).startsWith(a) || a.startsWith(simple(o)));
   if (starts) return starts;

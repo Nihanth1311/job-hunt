@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "../db";
 import { getProfile } from "./settings";
-import { isLatex } from "@/shared/core/latex";
+import { isLatex, markdownToLatex } from "@/shared/core/latex";
 import { TRACK_TITLE, type Track } from "@/shared/types";
 
 // A resume's PDF: kept in resume_files, next to (never inside) its resume_versions row.
@@ -85,7 +85,10 @@ export async function pdfText(pdf: Buffer): Promise<string> {
     .trim();
 }
 
-export async function saveResumeFile(uid: string, resumeId: string, file: { source: "upload" | "latex"; fileName: string; pdf: Buffer }) {
+/** upload: a PDF you uploaded. latex: your LaTeX, compiled. text: a text resume, laid out and compiled. */
+export type PdfSource = "upload" | "latex" | "text";
+
+export async function saveResumeFile(uid: string, resumeId: string, file: { source: PdfSource; fileName: string; pdf: Buffer }) {
   const db = await getDb();
   await db
     .insert(schema.resumeFiles)
@@ -117,10 +120,12 @@ export async function getResumePdf(uid: string, id: string): Promise<{ pdf: Buff
 
   const [file] = await db.select({ pdf: schema.resumeFiles.pdf }).from(schema.resumeFiles).where(eq(schema.resumeFiles.resumeId, id));
   if (file) return { pdf: file.pdf, fileName };
-  if (!isLatex(resume.content)) return null;
-  const out = await compileLatex(resume.content);
-  if ("error" in out) return out;
-  await saveResumeFile(uid, id, { source: "latex", fileName, pdf: out.pdf });
+  // LaTeX compiles as it is; a text (Markdown) resume is laid out in the same style first.
+  const latex = isLatex(resume.content);
+  if (!latex && !resume.content.trim()) return null;
+  const out = await compileLatex(latex ? resume.content : markdownToLatex(resume.content));
+  if ("error" in out) return latex ? out : { error: `Couldn't make a PDF of this text resume (${out.error}). Save it as LaTeX or upload a PDF instead.` };
+  await saveResumeFile(uid, id, { source: latex ? "latex" : "text", fileName, pdf: out.pdf });
   return { pdf: out.pdf, fileName };
 }
 
@@ -151,11 +156,11 @@ export function resumeFileName(...parts: (string | null | undefined)[]): string 
 }
 
 /** Which of these resumes already have a PDF (so the list can say "PDF" without loading any file). */
-export async function resumeIdsWithPdf(uid: string): Promise<Map<string, "upload" | "latex">> {
+export async function resumeIdsWithPdf(uid: string): Promise<Map<string, PdfSource>> {
   const db = await getDb();
   const rows = await db
     .select({ id: schema.resumeFiles.resumeId, source: schema.resumeFiles.source })
     .from(schema.resumeFiles)
     .where(eq(schema.resumeFiles.userId, uid));
-  return new Map(rows.map((r) => [r.id, r.source as "upload" | "latex"]));
+  return new Map(rows.map((r) => [r.id, r.source as PdfSource]));
 }

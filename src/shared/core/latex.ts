@@ -118,3 +118,91 @@ export function extractLatex(text: string): string {
   if (end >= 0) body = body.slice(0, end + "\\end{document}".length);
   return body.trim();
 }
+
+// ---------- Text (Markdown) resume → LaTeX, so it can be a PDF too ----------
+
+/** Characters plain LaTeX fonts lack, as close ASCII; anything else outside Latin-1 is dropped. */
+function plainChars(s: string): string {
+  return s
+    .replace(/[“”„]/g, '"')
+    .replace(/[‘’‚]/g, "'")
+    .replace(/–/g, "-")
+    .replace(/—/g, " - ")
+    .replace(/[•▪●◦]/g, "-")
+    .replace(/→/g, "->")
+    .replace(/…/g, "...")
+    .replace(/₹\s?/g, "Rs. ")
+    .replace(/[^\x00-\xff]/g, "");
+}
+
+/** **bold**, *italic*, `code` and [links](https://…) → LaTeX; everything else escaped. */
+function inlineTex(s: string): string {
+  const held: string[] = [];
+  const hold = (tex: string) => `\u0000${held.push(tex) - 1}\u0000`;
+  let t = plainChars(s);
+  t = t.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)/g, (_, text: string, url: string) => hold(`\\href{${url.replace(/([%#])/g, "\\$1")}}{${texEscape(text)}}`));
+  t = t.replace(/\*\*([^*]+)\*\*/g, (_, x: string) => hold(`\\textbf{${texEscape(x)}}`));
+  t = t.replace(/`([^`]+)`/g, (_, x: string) => hold(`\\texttt{${texEscape(x)}}`));
+  t = t.replace(/(^|[^*\w])\*([^*\s][^*]*)\*/g, (_, pre: string, x: string) => pre + hold(`\\textit{${texEscape(x)}}`));
+  return texEscape(t).replace(/\u0000(\d+)\u0000/g, (_, i: string) => held[Number(i)]);
+}
+
+/**
+ * A resume written in Markdown (as Claude writes it) as a LaTeX document in the same style as
+ * the LaTeX resumes: "# Name" and the lines under it become the header, "## Experience" a section,
+ * "- point" a bullet. Used to make a PDF of a text resume for application forms.
+ */
+export function markdownToLatex(md: string): string {
+  const lines = md.replace(/\r/g, "").replace(/^```[a-z]*\n|\n```\s*$/gi, "").split("\n");
+  const body: string[] = [];
+  let inList = false;
+  let header: string[] | null = null;
+  const closeList = () => {
+    if (inList) body.push("\\end{itemize}");
+    inList = false;
+  };
+  const flushHeader = () => {
+    if (!header) return;
+    const [name, ...rest] = header;
+    body.push(`\\begin{center}\n  {\\Huge \\scshape ${inlineTex(name)}} \\\\ \\vspace{2pt}\n  \\small ${rest.map(inlineTex).join(" \\\\ ")}\n\\end{center}`);
+    header = null;
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const h1 = line.match(/^#\s+(.*)/);
+    const h2 = line.match(/^##\s+(.*)/);
+    const h3 = line.match(/^#{3,6}\s+(.*)/);
+    const bullet = line.match(/^\s*(?:[-*+•]|\d+[.)])\s+(.*)/);
+    if (h1 && !body.length && !header) {
+      header = [h1[1]];
+      continue;
+    }
+    if (header && !h2 && !h3 && !bullet) {
+      if (line.trim()) header.push(line.trim().replace(/^\*\*|\*\*$/g, ""));
+      continue;
+    }
+    flushHeader();
+    if (h2 || (h1 && body.length)) {
+      closeList();
+      body.push(`\\section{${inlineTex((h2 ?? h1)![1])}}`);
+    } else if (h3) {
+      closeList();
+      body.push(`\\vspace{2pt}\\noindent\\textbf{${inlineTex(h3[1])}}\\par`);
+    } else if (bullet) {
+      if (!inList) body.push("\\begin{itemize}[leftmargin=0.15in, itemsep=1pt, topsep=2pt]");
+      inList = true;
+      body.push(`  \\item \\small ${inlineTex(bullet[1])}`);
+    } else if (/^\s*(---+|\*\*\*+)\s*$/.test(line)) {
+      closeList();
+    } else if (line.trim()) {
+      closeList();
+      body.push(`\\noindent ${inlineTex(line.trim())}\\par`);
+    } else {
+      closeList();
+    }
+  }
+  flushHeader();
+  closeList();
+  return `${LATEX_PREAMBLE}\n\n\\begin{document}\n${body.join("\n")}\n\\end{document}\n`;
+}

@@ -66,21 +66,23 @@ export const SCAN_JS = String.raw`(() => {
     return { text: "", el: null };
   };
   // A text field's label: <label for>, aria-labelledby, the label it sits in (Lever), or its box's title.
+  // Words widgets add to their own captions ("Select One Required"): not part of any question.
+  const denoise = (t) => clean((t || "").replace(/(\s*\b(select one|choose one|select|required|search|press enter to search)\b\s*)+$/i, ""));
   const labelOf = (el) => {
     const own = forLabel(el);
-    if (own && txt(own) && !/^attach$/i.test(txt(own))) return { text: txt(own), el: own };
-    const by = byIds(el.getAttribute("aria-labelledby"));
+    if (own && denoise(txt(own)) && !/^attach$/i.test(txt(own))) return { text: denoise(txt(own)), el: own };
+    const by = denoise(byIds(el.getAttribute("aria-labelledby")));
     if (by) return { text: by, el: null };
     const wrap = el.closest("label");
     if (wrap) {
       const inner = wrap.querySelector(".application-label");
       if (inner && txt(inner)) return { text: txt(inner), el: inner };
     }
-    const aria = clean(el.getAttribute("aria-label") || "");
-    if (aria) return { text: aria, el: null };
-    // Only a real question box: a page's first label is not every field's label.
+    // The question box's own heading (only a real question box: a page's first label is not every field's label).
     const t = titleOf(el.closest(BOX));
-    if (t.text) return t;
+    if (denoise(t.text)) return { text: denoise(t.text), el: t.el };
+    const aria = denoise(el.getAttribute("aria-label"));
+    if (aria) return { text: aria, el: null };
     return { text: clean(el.getAttribute("placeholder") || el.name || ""), el: null };
   };
   // Open pop-up lists, page furniture and Workday's chosen-items lists aren't questions.
@@ -140,7 +142,7 @@ export const SCAN_JS = String.raw`(() => {
       if (!vis(el)) continue;
       const aria = el.getAttribute("aria-label") || "";
       const l = labelOf(el);
-      const label = l.text && !/^select one$/i.test(l.text) ? l.text : aria.replace(/\s*(select one|required).*$/i, "").trim();
+      const label = l.text || "(a question without a label: see the form in Chrome)";
       const shown = txt(el);
       out.push({
         id: tag(el),
