@@ -22,7 +22,7 @@ import { requireUser } from "@/server/auth";
 import { getPreferences, getProfile, getSecrets, getState } from "@/server/services/settings";
 import { helperOnline, latestRun } from "@/server/services/autofill";
 import { resumeIdsWithPdf } from "@/server/services/resume-files";
-import { applyTarget, PLATFORM_LABEL } from "@/shared/autofill";
+import { applyTarget } from "@/shared/autofill";
 import { STATUS_LABEL, TRACK_LABEL, TRACK_TITLE, type AppStatus, type Preferences, type Track } from "@/shared/types";
 
 export async function generateMetadata({ params }: PageProps<"/jobs/[id]">): Promise<Metadata> {
@@ -188,7 +188,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
             <AutofillCard
               jobId={job.id}
               company={job.company}
-              platform={target ? PLATFORM_LABEL[target.platform] : null}
+              platform={target?.platform ?? null}
               resumes={autofillResumes}
               suggested={lastRun?.resumeId ?? autofillResumes[0]?.id ?? null}
               initialRun={lastRun}

@@ -10,6 +10,17 @@ export interface FillResult {
   report: AutofillReport;
   /** Required questions still waiting for you (agreements and files you add yourself aren't counted). */
   blocking: number;
+  /** The resume went onto this page. */
+  uploaded: boolean;
+  /** Required things only you can do in Chrome: tick a consent box, attach a file, fill a work-history entry. */
+  yoursInChrome: number;
+}
+
+export interface FillOptions {
+  /** A form spread over several pages (Workday, guided company sites). */
+  multipage?: boolean;
+  /** The resume is already on this application (an earlier page), so a non-required box can stay empty. */
+  resumeDone?: boolean;
 }
 
 const RESUME = /resume|\bcv\b|curriculum/i;
@@ -38,7 +49,7 @@ export async function waitForForm(page: Page): Promise<boolean> {
  * Fill everything it can. Safe to run again on the same page: fields that already hold
  * something (from you, from an earlier pass or from the site's own resume reader) are left alone.
  */
-export async function fillForm(page: Page, task: HelperTask, resumePath: string | null): Promise<FillResult> {
+export async function fillForm(page: Page, task: HelperTask, resumePath: string | null, opts: FillOptions = {}): Promise<FillResult> {
   const filled: { label: string; value: string }[] = [];
   const questions: AutofillQuestion[] = [];
   const notes: string[] = [];
@@ -47,21 +58,27 @@ export async function fillForm(page: Page, task: HelperTask, resumePath: string 
 
   // The resume first: some forms (Lever) read it and fill name and email themselves.
   let fields = await scan(page);
-  const resumeField = fields.find((f) => f.kind === "file" && RESUME.test(`${f.label} ${f.context}`) && !AUTOFILL_BOX.test(f.context ?? ""));
-  if (resumeField && resumePath && process.env.HELPER_NO_UPLOAD) {
+  const files = fields.filter((f) => f.kind === "file" && !COVER.test(`${f.label} ${f.context}`));
+  let resumeField = files.find((f) => RESUME.test(`${f.label} ${f.context}`) && (opts.multipage || !AUTOFILL_BOX.test(f.context ?? "")));
+  // Workday's first page ("Autofill with Resume") has one unnamed upload box: that's the resume.
+  if (!resumeField && opts.multipage && files.length === 1) resumeField = files[0];
+  const wantResume = resumeField && !resumeField.hasFile && !(opts.resumeDone && !resumeField.required);
+  let uploaded = false;
+  if (!wantResume) {
+    if (!resumeField && !opts.multipage) notes.push("No resume upload on this form.");
+  } else if (resumePath && process.env.HELPER_NO_UPLOAD) {
     notes.push("Test mode (HELPER_NO_UPLOAD): the resume wasn't attached.");
-  } else if (resumeField && resumePath) {
+  } else if (resumePath && resumeField) {
     try {
       await at(page, resumeField).setInputFiles(resumePath);
       resumeName = resumePath.split("/").pop();
+      uploaded = true;
       filled.push({ label: resumeField.label || "Resume", value: resumeName ?? "resume.pdf" });
-      await page.waitForTimeout(2500);
+      await page.waitForTimeout(opts.multipage ? 5000 : 2500); // Workday reads the resume before going on
       fields = await scan(page);
     } catch (e) {
       notes.push(`Couldn't attach your resume (${(e as Error).message.split("\n")[0]}). Attach it in Chrome.`);
     }
-  } else if (!resumeField) {
-    notes.push("No resume upload on this form.");
   }
 
   // Answering a question can reveal another ("If yes, which…?"), so look again after each pass.
@@ -79,8 +96,9 @@ export async function fillForm(page: Page, task: HelperTask, resumePath: string 
 
   const seen = new Set<string>();
   const unique = questions.filter((q) => (seen.has(q.label) ? false : (seen.add(q.label), true)));
-  const blocking = unique.filter((q) => q.required && !q.agreement && q.kind !== "file").length;
-  return { report: { filled, questions: unique, notes, resume: resumeName }, blocking };
+  const blocking = unique.filter((q) => q.required && !q.agreement && !q.manual).length;
+  const yoursInChrome = unique.filter((q) => q.required && (q.agreement || q.manual)).length;
+  return { report: { filled, questions: unique, notes, resume: resumeName }, blocking, uploaded, yoursInChrome };
 }
 
 async function fillField(
@@ -94,10 +112,16 @@ async function fillField(
   const label = f.label || "(unlabelled question)";
   if (f.kind === "file") {
     // The resume is done; a cover letter or other document is yours to add for now.
-    if (!AUTOFILL_BOX.test(f.context ?? "") && f.required) questions.push({ label: COVER.test(`${f.label} ${f.context}`) ? "Cover letter (attach it in Chrome)" : `${label} (attach it in Chrome)`, kind: "file", required: true });
+    if (!f.hasFile && !AUTOFILL_BOX.test(f.context ?? "") && f.required)
+      questions.push({ label: COVER.test(`${f.label} ${f.context}`) ? "Cover letter (attach it in Chrome)" : `${label} (attach it in Chrome)`, kind: "file", required: true, manual: true });
     return;
   }
   if (f.value) return; // already answered: never overwrite
+  if (f.inSection) {
+    // Work history, education…: Workday fills these from your resume; what's still missing is yours.
+    if (f.required) questions.push({ label: `${label} (fill in Chrome)`, kind: f.kind, required: true, manual: true });
+    return;
+  }
 
   const d = decide(label, ctx);
   if (d.skip) return;
@@ -205,12 +229,20 @@ async function pickInDropdown(page: Page, f: FormField, answer: string, options:
   const input = at(page, f);
   let opts = options;
   let choice = opts.length ? pickOption(answer, opts) : null;
-  if (!choice) {
+  // A list behind a button (Workday) can't be typed into: no match means asking you.
+  const typable = await input.evaluate((e) => e.tagName === "INPUT" || e.tagName === "TEXTAREA");
+  if (!choice && typable) {
     await input.click({ timeout: 4000 }).catch(() => {});
     await input.fill("");
     await input.pressSequentially(answer.slice(0, 40), { delay: 35 });
     await page.waitForTimeout(1200);
     opts = (await page.evaluate(`${OPTIONS_JS}(${JSON.stringify(f.id)})`)) as string[];
+    if (!opts.length) {
+      // Workday's search boxes search when you press Enter.
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(1500);
+      opts = (await page.evaluate(`${OPTIONS_JS}(${JSON.stringify(f.id)})`)) as string[];
+    }
     const first = answer.toLowerCase().split(/[,\s]+/)[0];
     choice = pickOption(answer, opts) ?? opts.find((o) => o.toLowerCase().startsWith(first)) ?? null;
   }

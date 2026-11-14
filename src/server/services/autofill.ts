@@ -174,7 +174,7 @@ export async function queueRun(userId: string, jobId: string, resumeId: string):
   const [job] = await db.select().from(schema.jobs).where(and(eq(schema.jobs.id, jobId), eq(schema.jobs.userId, userId)));
   if (!job) return { error: "This job isn't in your feed any more." };
   const target = applyTarget(job);
-  if (!target) return { error: "Autofill works on Greenhouse, Lever and Ashby forms for now." };
+  if (!target) return { error: "This job only has a job-board link (LinkedIn, Naukri…), where automated applying isn't allowed." };
   const pdf = await getResumePdf(userId, resumeId);
   if (!pdf) return { error: "That resume has no PDF. Upload a PDF or save it as LaTeX on the Resumes page." };
   if ("error" in pdf) return { error: pdf.error };
@@ -218,6 +218,7 @@ async function updateRun(runId: string, patch: Partial<Pick<AutofillRun, "status
 /**
  * Your answers to the questions the helper couldn't answer. They go to the form straight away;
  * the ones marked "remember" are also saved to your answers bank for every future form.
+ * With no answers it means "I did it in Chrome, carry on": the helper looks at the page again.
  */
 export async function answerRun(
   userId: string,
@@ -225,7 +226,7 @@ export async function answerRun(
   answers: { label: string; value: string; remember: boolean }[],
 ): Promise<AutofillRunView | null> {
   const run = await ownRun(userId, runId);
-  if (!run || !["needs_you", "review", "filling"].includes(run.status)) return null;
+  if (!run || !["needs_you", "review", "filling", "waiting"].includes(run.status)) return null;
   const db = await getDb();
   const [job] = await db.select({ company: schema.jobs.company }).from(schema.jobs).where(eq(schema.jobs.id, run.jobId));
   const company = job?.company ?? "";
@@ -233,7 +234,6 @@ export async function answerRun(
   const given = answers
     .map((a) => ({ label: a.label.slice(0, 500), value: a.value.trim().slice(0, 4000), remember: a.remember }))
     .filter((a) => a.label && a.value);
-  if (!given.length) return view(run);
 
   const forRun = { ...run.answers };
   for (const a of given) forRun[normQuestion(a.label, company)] = a.value;
@@ -248,7 +248,7 @@ export async function answerRun(
     }
     await saveAnswerBank(userId, bank);
   }
-  const updated = await updateRun(runId, { status: "answered", answers: forRun, message: "Filling in your answers…" });
+  const updated = await updateRun(runId, { status: "answered", answers: forRun, message: given.length ? "Filling in your answers…" : "Looking at the form again…" });
   wake(userId);
   return view(updated);
 }
@@ -336,10 +336,13 @@ export async function nextTask(userId: string, force = false): Promise<HelperTas
 }
 
 /** What the helper can report. Anything else (e.g. reviving a cancelled run) is refused. */
+const ONGOING: RunStatus[] = ["waiting", "needs_you", "review", "error", "submitted"];
 const FROM_HELPER: Partial<Record<RunStatus, RunStatus[]>> = {
-  filling: ["needs_you", "review", "error", "submitted", "filling"],
-  needs_you: ["needs_you", "review", "error", "submitted", "filling"],
-  review: ["review", "needs_you", "error", "submitted"],
+  filling: ONGOING,
+  waiting: ONGOING,
+  needs_you: ONGOING,
+  review: ONGOING,
+  // You answered on the site but the helper hasn't picked that up yet: only "it's done" or "it broke" count.
   answered: ["submitted", "error"],
 };
 

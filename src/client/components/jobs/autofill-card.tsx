@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { answerAutofill, autofillUpdate, cancelAutofill, confirmSubmitted, startAutofill } from "@/server/actions/autofill";
-import { ACTIVE_RUN, isCompanySpecific, type AutofillQuestion, type AutofillRunView } from "@/shared/autofill";
+import { ACTIVE_RUN, isCompanySpecific, PLATFORM_LABEL, type AutofillPlatform, type AutofillQuestion, type AutofillRunView } from "@/shared/autofill";
 import { Button, Callout, Card, CardTitle, Icon, Spinner, buttonClass } from "../ui";
 
 type ResumeOption = { id: string; label: string };
@@ -28,8 +28,8 @@ export function AutofillCard({
 }: {
   jobId: string;
   company: string;
-  /** "Greenhouse", "Lever"… or null when autofill can't do this site yet. */
-  platform: string | null;
+  /** Which kind of form, or null when this job only has a job-board link (LinkedIn, Naukri…). */
+  platform: AutofillPlatform | null;
   resumes: ResumeOption[];
   suggested: string | null;
   initialRun: AutofillRunView | null;
@@ -93,7 +93,10 @@ export function AutofillCard({
     return (
       <Card className="p-5">
         <CardTitle icon="sparkles">Autofill</CardTitle>
-        <p className="text-sm text-muted">Autofill works on Greenhouse, Lever and Ashby application forms for now. This job uses another site.</p>
+        <p className="text-sm text-muted">
+          This job only has a job-board link (LinkedIn, Naukri, Indeed…). Their rules don&apos;t allow filling applications automatically, so
+          use Apply and fill it there yourself.
+        </p>
       </Card>
     );
   }
@@ -114,6 +117,7 @@ export function AutofillCard({
               {run.message || (run.status === "error" ? "The last autofill stopped." : "Cancelled.")}
             </Callout>
           )}
+          <p className="mb-3 text-sm text-muted">{HOW[platform]}</p>
           {resumes.length === 0 ? (
             <p className="text-sm text-muted">
               Autofill uploads a resume PDF.{" "}
@@ -124,9 +128,6 @@ export function AutofillCard({
             </p>
           ) : (
             <>
-              <p className="mb-3 text-sm text-muted">
-                Opens the {platform} form on your laptop and fills it with your profile and application answers. You check it and press Submit.
-              </p>
               <label className="label" htmlFor="af-resume">
                 Resume to upload
               </label>
@@ -186,6 +187,12 @@ function ActiveRun({
         <p>{statusLine(run)}</p>
       </div>
 
+      {run.report.pages && run.report.pages.length > 0 && (
+        <p className="text-xs text-muted">
+          Pages: {run.report.pages.join(" → ")}
+        </p>
+      )}
+
       {run.status === "queued" && !online && (
         <Callout tone="warn">
           The helper isn&apos;t running on your laptop. In Terminal, inside your job-hunt folder, run <code>npm run helper</code>. It picks this
@@ -226,7 +233,18 @@ function ActiveRun({
       )}
 
       <div className="flex flex-wrap gap-2 border-t border-line pt-3">
-        {(run.status === "review" || run.status === "needs_you") && (
+        {(run.status === "needs_you" || run.status === "waiting") && (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={pending}
+            title="You did something in Chrome yourself: the helper looks at the form again and carries on"
+            onClick={() => start(async () => onRun(await answerAutofill(run.id, [])))}
+          >
+            <Icon name="refresh" className="size-3.5" /> Carry on
+          </Button>
+        )}
+        {(run.status === "review" || run.status === "needs_you" || run.status === "waiting") && (
           <Button size="sm" variant="secondary" disabled={pending} onClick={() => start(async () => onRun(await confirmSubmitted(run.id, jobId)))}>
             <Icon name="check" className="size-3.5" /> I submitted it
           </Button>
@@ -249,15 +267,27 @@ function ActiveRun({
   );
 }
 
+/** What pressing Autofill will do, by kind of form. */
+const HOW: Record<AutofillPlatform, string> = {
+  greenhouse: "Opens the Greenhouse form on your laptop and fills it with your profile and application answers. You check it and press Submit.",
+  lever: "Opens the Lever form on your laptop and fills it with your profile and application answers. You check it and press Submit.",
+  ashby: "Opens the Ashby form on your laptop and fills it with your profile and application answers. You check it and press Submit.",
+  workday:
+    "Opens the job on Workday and presses Apply. Workday needs an account for each company: you sign in (or create one) in the Chrome window, then it fills every page and stops at Review for you to submit.",
+  site: `Opens the job on the ${PLATFORM_LABEL.site}. You press Apply and move through it; every form page is filled as soon as it appears. You submit at the end.`,
+};
+
 function statusLine(run: AutofillRunView): string {
   switch (run.status) {
     case "queued":
       return "Waiting for the helper on your laptop…";
+    case "waiting":
+      return run.message || "Waiting for you in the Chrome window…";
     case "filling":
     case "answered":
       return run.message || "Filling the form in Chrome…";
     case "needs_you":
-      return "Almost there. The form asks a few things only you can answer:";
+      return run.report.step ? `${run.message} Answer here, or in Chrome:` : "Almost there. The form asks a few things only you can answer:";
     case "review":
       return "All filled. Check the form in Chrome, then press Submit there yourself.";
     default:
@@ -277,8 +307,8 @@ function Questions({
   disabled: boolean;
   onSend: (answers: { label: string; value: string; remember: boolean }[]) => void;
 }) {
-  const answerable = questions.filter((q) => !q.agreement && q.kind !== "file");
-  const yours = questions.filter((q) => q.agreement || q.kind === "file");
+  const answerable = questions.filter((q) => !q.agreement && !q.manual && q.kind !== "file");
+  const yours = questions.filter((q) => q.agreement || q.manual || q.kind === "file");
   const [values, setValues] = useState<Record<string, string>>({});
   const [remember, setRemember] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(answerable.map((q) => [q.label, !isCompanySpecific(q.label, company)])),

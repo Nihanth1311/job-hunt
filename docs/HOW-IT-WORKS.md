@@ -359,6 +359,14 @@ A website can't control your browser, so filling forms needs a program on your l
   doesn't match any of a dropdown's choices is asked, not guessed.
 - **Never answered for you:** agreements and consent ("I acknowledge…"), anything it isn't
   sure of, and Submit.
+- **Forms of several pages** ([helper/multipage.ts](../helper/multipage.ts)). *Workday*: it
+  presses Apply, picks "Use My Last Application" or "Autofill with Resume", and waits while you
+  sign in (a password box on the page means "your turn"). Then, page by page: fill, press Save and
+  Continue, check the page really changed (or read Workday's error), until the button would
+  submit. Work-history and education entries are left to Workday's resume reader; required
+  ones still empty are listed for you. *Any other company site* (guided): you press Apply and
+  Next; each time the page changes into a form (at least three fields, so a job page's search
+  box doesn't count), it's filled. Going back to look at an earlier page never pushes you forward.
 
 > **Concept: polling, made cheap.** The helper asks the site for work every few seconds. If each
 > question read the database, Neon could never pause (see §8). So the site remembers in memory
@@ -391,6 +399,26 @@ your laptop doesn't run fetches too.
 ## 11. Learning journal
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
+
+### Autofill for Workday and every other company site
+**Problem:** most companies followed here (46 of 94) use Workday, and autofill only knew
+one-page forms, so in practice it couldn't apply to a single job in the feed.
+**Change:** Workday is filled page by page (Apply → resume → sign-in by you → My Information →
+My Experience → Application Questions → Voluntary Disclosures → stops at Review), and any other
+company careers site in a guided mode where you press Next. Only job boards (LinkedIn, Naukri,
+Indeed) stay out, because their rules forbid it. The job list got an Autofill button, and the job
+page a **Carry on** button for when you've done something yourself in Chrome.
+**Tested** on a stand-in Workday application built like the real one (Workday's sites were down
+for maintenance that day): 16 fields filled, including its search-as-you-type "How did you hear
+about us" box, its button dropdowns and "decline" for the diversity questions; it stopped for a
+missing school entry, an AI-consent question and the terms box, carried on after each, and stopped
+at Review. The guided mode left a job-alert box alone, filled both pages and stopped at Submit.
+**Bugs found:** a dropdown with no label of its own took the page's first label ("First name")
+and asked a nonsense question; "Total experience (years)" wasn't known as years of experience.
+**Lessons:** a feature that covers the minority of real cases isn't done; count what users
+actually meet. When a site is down, a faithful stand-in still tests the logic, but say plainly
+what remains to check on the real thing. And it's better to stop and say "tick this in Chrome"
+than to press Next into an error the user then has to decode.
 
 ### Autofill: a helper on your laptop fills the forms
 **What:** press Autofill on a job; a helper on your laptop opens the Greenhouse, Lever or Ashby

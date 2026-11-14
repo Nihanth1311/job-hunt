@@ -2,18 +2,29 @@
 // autofilled and to describe the answers bank; the laptop helper (helper/) uses them to
 // decide what goes in each field of a real application form. Pure logic: no database, no browser.
 
+import { isJobBoard } from "./core/links";
 import type { Profile } from "./types";
 
 // ---------- Which forms ----------
 
-export const AUTOFILL_PLATFORMS = ["greenhouse", "lever", "ashby"] as const;
+/**
+ * greenhouse, lever, ashby: one-page forms, filled in one go.
+ * workday: an account per company; you sign in, then it fills page after page up to Review.
+ * site: any other company careers site; you move through it, each form page is filled as it appears.
+ */
+export const AUTOFILL_PLATFORMS = ["greenhouse", "lever", "ashby", "workday", "site"] as const;
 export type AutofillPlatform = (typeof AUTOFILL_PLATFORMS)[number];
 
 export const PLATFORM_LABEL: Record<AutofillPlatform, string> = {
   greenhouse: "Greenhouse",
   lever: "Lever",
   ashby: "Ashby",
+  workday: "Workday",
+  site: "company careers site",
 };
+
+/** Forms the helper moves through page by page. */
+export const MULTI_PAGE: AutofillPlatform[] = ["workday", "site"];
 
 const applyUrlFor = (platform: AutofillPlatform, slug: string, id: string) => {
   const s = encodeURIComponent(slug);
@@ -27,7 +38,8 @@ const applyUrlFor = (platform: AutofillPlatform, slug: string, id: string) => {
  * The application form to open for a job, or null when autofill can't do that site yet.
  * Jobs read from a careers board carry "<platform>:<board>:<id>" at the end of their id, which
  * gives the form even when the posting lives on the company's own domain (stripe.com/jobs/…).
- * Other jobs (added by hand, Google Jobs) work when their link is on one of these boards.
+ * Workday postings are opened as they are (the helper presses Apply). Any other company site
+ * works in guided mode. Job boards (LinkedIn, Naukri, Indeed…) never: their terms forbid it.
  */
 export function applyTarget(job: { id: string; url: string; companyUrl: string | null }): { platform: AutofillPlatform; url: string } | null {
   const fromId = job.id.match(/(?:^|:)(greenhouse|lever|ashby):([^:]+):([^:]+)$/);
@@ -35,12 +47,24 @@ export function applyTarget(job: { id: string; url: string; companyUrl: string |
     const platform = fromId[1] as AutofillPlatform;
     return { platform, url: applyUrlFor(platform, fromId[2], fromId[3]) };
   }
-  for (const link of [job.companyUrl, job.url]) {
+  const links = [job.companyUrl, job.url].filter((l): l is string => !!l && /^https?:\/\//i.test(l));
+  for (const link of links) {
     const found = boardFromUrl(link);
     if (found) return found;
   }
-  return null;
+  const workday = links.find((l) => /(^|\.)(myworkdayjobs|myworkdaysite)\.com$/i.test(hostname(l)));
+  if (workday) return { platform: "workday", url: workday };
+  const site = links.find((l) => !isJobBoard(l));
+  return site ? { platform: "site", url: site } : null;
 }
+
+const hostname = (link: string) => {
+  try {
+    return new URL(link).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+};
 
 function boardFromUrl(link: string | null | undefined): { platform: AutofillPlatform; url: string } | null {
   if (!link) return null;
@@ -86,6 +110,9 @@ export const ANSWER_FIELDS: AnswerField[] = [
   { key: "earliestStart", label: "Earliest start date", placeholder: "Immediately, or 1 March 2027" },
   { key: "currentCtc", label: "Current CTC (LPA)", placeholder: "8", hint: "Left blank, salary questions are asked each time." },
   { key: "expectedCtc", label: "Expected CTC (LPA)", placeholder: "12" },
+  { key: "addressLine1", label: "Street address", placeholder: "Flat, street, area", hint: "Workday forms ask for an address." },
+  { key: "postalCode", label: "PIN code", placeholder: "500081" },
+  { key: "state", label: "State", placeholder: "Telangana" },
   { key: "currentCompany", label: "Current company" },
   { key: "currentTitle", label: "Current job title" },
   { key: "college", label: "College or university" },
@@ -162,6 +189,8 @@ export interface AutofillQuestion {
   options?: string[];
   /** Agreements and consent: always yours to answer, and never remembered. */
   agreement?: boolean;
+  /** Something to do yourself in Chrome (attach a file, fill a work-history entry). */
+  manual?: boolean;
 }
 
 export interface AutofillReport {
@@ -170,13 +199,20 @@ export interface AutofillReport {
   notes?: string[];
   /** The resume file put on the form. */
   resume?: string;
+  /** Multi-page forms: the page it's on, and the pages done so far. */
+  step?: string;
+  pages?: string[];
   at?: string;
 }
 
-export const RUN_STATUSES = ["queued", "filling", "needs_you", "answered", "review", "submitted", "error", "cancelled"] as const;
+/**
+ * waiting: the helper waits for you in Chrome (sign in, press Apply, move to the next page).
+ * needs_you: questions on the site only you can answer. review: filled; check it and submit.
+ */
+export const RUN_STATUSES = ["queued", "filling", "waiting", "needs_you", "answered", "review", "submitted", "error", "cancelled"] as const;
 export type RunStatus = (typeof RUN_STATUSES)[number];
 /** The helper still has work to do on these. */
-export const ACTIVE_RUN: RunStatus[] = ["queued", "filling", "needs_you", "answered", "review"];
+export const ACTIVE_RUN: RunStatus[] = ["queued", "filling", "waiting", "needs_you", "answered", "review"];
 
 /** What the helper gets for one form. */
 export interface HelperTask {
@@ -241,13 +277,17 @@ const AGREEMENT = /\b(i agree|agree to|consent|acknowledge|certify|attest|i unde
 /** First match wins. Patterns run on normQuestion(label). */
 const RULES: Rule[] = [
   // Never filled: hidden traps for bots, and optional fields that are better left empty.
-  SKIPPED(/robots only|leave (this|it) (blank|empty)|preferred (first )?name|nickname|middle name|address line 2|\bsuffix\b/),
+  SKIPPED(/robots only|leave (this|it) (blank|empty)|preferred (first )?name|nickname|middle name|address line 2|\bsuffix\b|local (given|family|first|last) name|phone extension/),
   SKIPPED(/twitter|\bx com\b|instagram|facebook|tiktok/),
   P(/\bfirst name|given name/, "firstName"),
   P(/\blast name|surname|family name/, "lastName"),
   P(/^(full |legal |your )?name$|^name (as|in) |full name|legal name|^your name\b/, "fullName"),
   P(/e ?mail/, "email"),
   P(/country code|phone code|dial code/, "country"),
+  P(/device type|phone type/, () => "Mobile"),
+  B(/address line 1|street address|^address$|(current|home|residential) address/, "addressLine1"),
+  B(/postal|zip|pin ?code/, "postalCode"),
+  B(/^(state|province|region)\b|state or province/, "state"),
   P(/phone|mobile|contact number/, "phone"),
   P(/linkedin/, "linkedin"),
   P(/github/, "github"),
@@ -259,7 +299,7 @@ const RULES: Rule[] = [
   B(/notice period/, "noticePeriod"),
   B(/(current|present).{0,20}(ctc|compensation|salary|pay|package)/, "currentCtc"),
   B(/(expected|desired|expectation).{0,20}(ctc|compensation|salary|pay|package)|salary (expectation|requirement)/, "expectedCtc"),
-  P(/years of (professional |relevant |work |industry )?experience|how many years/, "yearsExperience"),
+  P(/years of (professional |relevant |work |industry )?experience|how many years|(total|overall|relevant) (work )?experience|experience (in )?years/, "yearsExperience"),
   B(/start date|when can you (start|join)|earliest .*(start|join)|available to (start|join)|availability/, "earliestStart"),
   B(/how did you (hear|find|learn)|^source$|where did you (hear|find)|referral source/, "howHeard"),
   B(/current or (previous|most recent) employer|current (company|employer|organi[sz]ation)|(most recent|last) (company|employer)|^company( name)?$|^employer$/, "currentCompany"),

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { getJobDescription } from "@/server/actions/jobs";
+import { applyTarget } from "@/shared/autofill";
 import { experienceLabel } from "@/shared/core/classify";
 import { siteLabel, sourceLabel } from "@/shared/core/links";
 import type { JobListItem } from "@/shared/types";
@@ -100,10 +101,18 @@ export function JobCard({ job, googleQuota }: { job: JobListItem; googleQuota?: 
             job={job}
             className="mt-4 border-t border-line pt-4 max-sm:[&>*]:grow"
             leading={
-              <Link href={`${page}#tailor`} className={buttonClass("primary", "sm")}>
-                <Icon name="sparkles" className="size-3.5" />
-                Tailor resume
-              </Link>
+              <>
+                <Link href={`${page}#tailor`} className={buttonClass("primary", "sm")}>
+                  <Icon name="sparkles" className="size-3.5" />
+                  Tailor resume
+                </Link>
+                {applyTarget(job) && (
+                  <Link href={`${page}#autofill`} className={buttonClass("secondary", "sm")} title="Fill the application form in Chrome with the laptop helper">
+                    <Icon name="monitor" className="size-3.5" />
+                    Autofill
+                  </Link>
+                )}
+              </>
             }
             trailing={
               job.hasDescription && (

@@ -19,6 +19,10 @@ export interface FormField {
   context?: string;
   /** Ashby's Yes/No buttons, chosen by clicking a button rather than an input. */
   buttons?: boolean;
+  /** A file field that already holds a file. */
+  hasFile?: boolean;
+  /** Inside a Workday work-history, education, languages, skills or websites entry: left to the resume reader and you. */
+  inSection?: boolean;
 }
 
 export const SCAN_JS = String.raw`(() => {
@@ -32,7 +36,7 @@ export const SCAN_JS = String.raw`(() => {
     return s.visibility !== "hidden" && s.display !== "none";
   };
   const starred = (el) => !!el && /[*✱]/.test(el.textContent || "");
-  const BOX = ".field-wrapper, .eeoc__question__wrapper, .application-question, [data-field-path], fieldset, .form-group, .form-field, .question";
+  const BOX = "[data-automation-id^=formField-], .field-wrapper, .eeoc__question__wrapper, .application-question, [data-field-path], fieldset, .form-group, .form-field, .question";
   const boxOf = (el) => el.closest(BOX) || (el.parentElement && el.parentElement.parentElement) || el.parentElement;
   let next = Number(document.body.dataset.jhNext || 0);
   const tag = (el) => {
@@ -69,17 +73,70 @@ export const SCAN_JS = String.raw`(() => {
       const inner = wrap.querySelector(".application-label");
       if (inner && txt(inner)) return { text: txt(inner), el: inner };
     }
-    const t = titleOf(boxOf(el));
+    const aria = clean(el.getAttribute("aria-label") || "");
+    if (aria) return { text: aria, el: null };
+    // Only a real question box: a page's first label is not every field's label.
+    const t = titleOf(el.closest(BOX));
     if (t.text) return t;
-    return { text: clean(el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.name || ""), el: null };
+    return { text: clean(el.getAttribute("placeholder") || el.name || ""), el: null };
   };
-  const inMenu = (el) => !!el.closest('[role=listbox], [role=menu], .iti__dropdown-content, .select__menu');
+  // Open pop-up lists, page furniture and Workday's chosen-items lists aren't questions.
+  const inMenu = (el) =>
+    !!el.closest(
+      '[role=listbox], [role=menu], .iti__dropdown-content, .select__menu, [data-automation-id=menuItem], [data-automation-id=promptOption], [data-automation-widget=wd-popup], header, nav, footer, [data-automation-id=utilityMenu]',
+    );
+  // Workday's repeating entries (work history, education…), filled by its resume reader.
+  const sectionOf = (el) => {
+    const g = el.closest('[role=group][aria-labelledby$="-section"]');
+    return g && /work-?experience|education|language|skill|website/i.test(g.getAttribute("aria-labelledby") || "") ? g : null;
+  };
+  const panelOf = (el) => {
+    const p = el.closest('[role=group][aria-labelledby$="-panel"]');
+    return p ? txt(p.querySelector("h5, h4, h3")) : "";
+  };
 
   const out = [];
   const doneGroups = new Set();
-  for (const el of document.querySelectorAll("input, textarea, select, button[data-option]")) {
+  for (const el of document.querySelectorAll("input, textarea, select, button[data-option], button[aria-haspopup=listbox]")) {
     if (inMenu(el)) continue;
+    if (el.getAttribute("data-automation-id") === "beecatcher") continue; // Workday's trap for bots
     const type = (el.getAttribute("type") || el.tagName).toLowerCase();
+    const section = type === "file" ? null : sectionOf(el);
+    if (section) {
+      // Report only what's required and still empty; you or the resume reader fill these.
+      if (!vis(el) || type === "checkbox" || type === "radio") continue;
+      const own = el.tagName === "BUTTON" ? (el.getAttribute("aria-label") || "").replace(/\s*(select one|required).*$/i, "") : labelOf(el).text;
+      const v = el.tagName === "BUTTON" ? (/^select one$/i.test(txt(el)) ? "" : txt(el)) : (el.value || "").replace(/^(mm|yyyy|dd)$/i, "");
+      const required = el.required || el.getAttribute("aria-required") === "true" || / required/i.test(el.getAttribute("aria-label") || "");
+      out.push({ id: tag(el), kind: "text", label: (panelOf(el) ? panelOf(el) + " › " : "") + own, required, value: v.trim(), inSection: true });
+      continue;
+    }
+
+    // Workday's dropdowns: a button that opens a list.
+    if (el.tagName === "BUTTON" && el.getAttribute("aria-haspopup") === "listbox") {
+      if (!vis(el)) continue;
+      const aria = el.getAttribute("aria-label") || "";
+      const l = labelOf(el);
+      const label = l.text && !/^select one$/i.test(l.text) ? l.text : aria.replace(/\s*(select one|required).*$/i, "").trim();
+      const shown = txt(el);
+      out.push({
+        id: tag(el),
+        kind: "combobox",
+        label,
+        required: el.getAttribute("aria-required") === "true" || / required/i.test(aria) || starred(l.el),
+        value: /^select one$/i.test(shown) ? "" : shown,
+      });
+      continue;
+    }
+    // Workday's search boxes ("How did you hear about us?"): what's chosen shows as items next to it.
+    if (el.getAttribute("data-automation-id") === "searchBox" || el.getAttribute("data-uxi-widget-type") === "selectinput") {
+      if (!vis(el)) continue;
+      const l = labelOf(el);
+      const holder = el.closest("[data-automation-id^=formField-]") || boxOf(el);
+      const chosen = holder ? [...holder.querySelectorAll("[data-automation-id=selectedItemList] [data-automation-id=menuItem], [data-automation-id=selectedItem]")].map(txt) : [];
+      out.push({ id: tag(el), kind: "combobox", label: l.text, required: el.getAttribute("aria-required") === "true" || starred(l.el), value: chosen.join(", ") });
+      continue;
+    }
 
     // Ashby's Yes/No: two buttons (and a hidden checkbox) in one question box.
     if (el.tagName === "BUTTON") {
@@ -102,6 +159,7 @@ export const SCAN_JS = String.raw`(() => {
 
     if (type === "file") {
       const box = boxOf(el);
+      const zone = el.closest("[data-automation-id^=formField-], [data-automation-id*=attachment i], [data-automation-id*=resume i]") || box;
       out.push({
         id: tag(el),
         kind: "file",
@@ -109,6 +167,7 @@ export const SCAN_JS = String.raw`(() => {
         required: el.required || el.getAttribute("aria-required") === "true" || starred(titleOf(box).el),
         value: "",
         context: clean((box ? box.innerText : "") || "").slice(0, 200),
+        hasFile: !!(zone && zone.querySelector("[data-automation-id^=file-upload-item], [data-automation-id=file-upload-successful], [data-automation-id=delete-file]")),
       });
       continue;
     }
@@ -183,12 +242,12 @@ export const OPTIONS_JS = String.raw`((id) => {
   const el = document.querySelector('[data-jh="' + id + '"]');
   if (!el) return [];
   document.querySelectorAll("[data-jh-pick]").forEach((o) => o.removeAttribute("data-jh-pick"));
-  const SEL = '[role=option], .select__option, .dropdown-results > div:not(:empty)';
+  const SEL = '[data-automation-id=promptOption], [role=option], .select__option, .dropdown-results > div:not(:empty)';
   const ctl = el.getAttribute("aria-controls") || el.getAttribute("aria-owns");
   const scopes = [ctl && document.getElementById(ctl), el.closest(".select-shell, .application-field, [data-field-path], .field-wrapper"), document];
   for (const scope of scopes) {
     if (!scope) continue;
-    const opts = [...scope.querySelectorAll(SEL)].filter((o) => vis(o) && !o.closest(".iti__dropdown-content"));
+    const opts = [...scope.querySelectorAll(SEL)].filter((o) => vis(o) && !o.closest(".iti__dropdown-content, [data-automation-id=selectedItemList]"));
     if (!opts.length) continue;
     return opts.slice(0, 200).map((o, i) => {
       o.setAttribute("data-jh-pick", String(i));
@@ -202,3 +261,92 @@ export const OPTIONS_JS = String.raw`((id) => {
 export const SUBMITTED_TEXT =
   /application (has been |was )?(successfully )?(submitted|received)|thank(s| you) for (applying|your application|submitting)|we('ve| have) received your application|successfully (applied|submitted)/i;
 export const SUBMITTED_URL = /\/(confirmation|thanks|thank-you|thank_you|submitted|application_confirmation)(\/|\?|$)/i;
+
+/**
+ * Where a multi-page form is: the step it's on, whether it waits for a sign-in, and any error
+ * messages showing. `fields` counts what's fillable on the page (0 = a page with nothing to fill).
+ */
+export interface PageState {
+  gate: boolean;
+  step: string;
+  index: number;
+  heading: string;
+  url: string;
+  errors: string[];
+}
+
+export const STATE_JS = String.raw`(() => {
+  const vis = (e) => !!(e && (e.offsetWidth || e.offsetHeight || e.getClientRects().length));
+  const txt = (e) => ((e && (e.innerText || e.textContent)) || "").replace(/\s+/g, " ").trim();
+  const active = document.querySelector("[data-automation-id=progressBarActiveStep]");
+  const steps = [...document.querySelectorAll("[data-automation-id=progressBar] li")];
+  const heading = [...document.querySelectorAll("main h1, main h2, [data-automation-id=pageHeader], h1, h2")].find(vis);
+  const password = [...document.querySelectorAll("input[type=password], input[autocomplete=one-time-code]")].some(vis);
+  const body = txt(document.body).slice(0, 3000);
+  const inputs = [...document.querySelectorAll("main input, main textarea, form input, form textarea")].filter(vis).length;
+  const code = inputs <= 7 && /verification code|enter the code|one[- ]time (pass|code)|verify your (account|email)/i.test(body);
+  const errors = [...document.querySelectorAll("[data-automation-id=errorBanner], [data-automation-id=errorMessage], [data-automation-id^=inputAlert], [role=alert]")]
+    .filter(vis)
+    .map(txt)
+    .filter((s) => s && !/success|uploaded|saved/i.test(s))
+    .slice(0, 8);
+  return {
+    gate: password || code,
+    step: txt(active).replace(/^current step \d+ of \d+\s*/i, ""),
+    index: active ? steps.indexOf(active.closest("li") || active) : -1,
+    heading: txt(heading).slice(0, 80),
+    url: location.origin + location.pathname,
+    errors,
+  };
+})()`;
+
+/**
+ * The button that moves to the next page, marked data-jh-next. Allow-list only: a button that
+ * submits, sends or finishes is reported as "submit" and never clicked.
+ */
+export const NEXT_JS = String.raw`(() => {
+  const vis = (e) => !!(e && (e.offsetWidth || e.offsetHeight || e.getClientRects().length));
+  const name = (e) => ((e.innerText || e.value || e.getAttribute("aria-label") || "") + "").replace(/\s+/g, " ").trim();
+  const NEXT = /^(next|next step|continue|proceed|save (and|&) continue|save (and|&) next)$/i;
+  const STOP = /submit|send|finish|complete|^apply/i;
+  document.querySelectorAll("[data-jh-next]").forEach((e) => e.removeAttribute("data-jh-next"));
+  const all = [...document.querySelectorAll("button, [role=button], input[type=submit], input[type=button]")].filter(
+    (e) => vis(e) && !e.closest("header, nav, footer, [role=banner], [role=navigation]"),
+  );
+  const footer = all.find((e) => ["pageFooterNextButton", "bottom-navigation-next-button"].includes(e.getAttribute("data-automation-id")));
+  if (footer && !NEXT.test(name(footer))) return { kind: "submit", text: name(footer) };
+  const next = footer || all.find((e) => NEXT.test(name(e)));
+  if (next) {
+    next.setAttribute("data-jh-next", "1");
+    return { kind: "next", text: name(next), disabled: next.disabled || next.getAttribute("aria-disabled") === "true" };
+  }
+  const stop = all.find((e) => STOP.test(name(e)));
+  return stop ? { kind: "submit", text: name(stop) } : { kind: "none", text: "" };
+})()`;
+
+/**
+ * Before the form: the job page's Apply, then Workday's "how do you want to apply?". Prefers
+ * reusing your last application at that company, then letting Workday read your resume.
+ * Marks the button data-jh-start and returns its text ("" when there's none).
+ */
+export const START_JS = String.raw`((hasResume) => {
+  const vis = (e) => !!(e && (e.offsetWidth || e.offsetHeight || e.getClientRects().length));
+  const name = (e) => ((e.innerText || e.getAttribute("aria-label") || "") + "").replace(/\s+/g, " ").trim();
+  document.querySelectorAll("[data-jh-start]").forEach((e) => e.removeAttribute("data-jh-start"));
+  const all = [...document.querySelectorAll("a, button, [role=button]")].filter((e) => vis(e) && !e.closest("header, nav, footer"));
+  const byId = (id) => all.find((e) => e.getAttribute("data-automation-id") === id);
+  const order = [
+    () => byId("useMyLastApplication") || all.find((e) => /^use my last application$/i.test(name(e))),
+    () => (hasResume ? byId("autofillWithResume") || all.find((e) => /^autofill with resume$/i.test(name(e))) : null),
+    () => byId("applyManually") || all.find((e) => /^apply manually$/i.test(name(e))),
+    () => byId("adventureButton") || byId("applyButton") || all.find((e) => /^apply( now| for this job)?$/i.test(name(e))),
+  ];
+  for (const pick of order) {
+    const b = pick();
+    if (b) {
+      b.setAttribute("data-jh-start", "1");
+      return name(b) || "Apply";
+    }
+  }
+  return "";
+})`;

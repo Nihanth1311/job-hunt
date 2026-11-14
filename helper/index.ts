@@ -10,10 +10,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { chromium, type BrowserContext, type Page } from "playwright-core";
-import type { HelperTask } from "../src/shared/autofill";
+import { MULTI_PAGE, type HelperTask, type RunStatus } from "../src/shared/autofill";
 import { LinkError, Site } from "./api";
 import { CHROME_DIR, FILES_DIR, readConfig, writeConfig } from "./config";
 import { fillForm, waitForForm } from "./fill";
+import { advance, look, type Flow } from "./multipage";
 import { SUBMITTED_TEXT, SUBMITTED_URL } from "./scan";
 
 /** Ask often while a form is open or something just happened; less when idle. */
@@ -36,6 +37,8 @@ interface Open {
   filled: { label: string; value: string }[];
   /** The resume file attached on the first pass, if it was. */
   resume?: string;
+  /** Workday and guided company sites: where it is in a form of several pages. */
+  flow?: Flow;
 }
 
 class Helper {
@@ -96,18 +99,24 @@ class Helper {
         const blank = ctx.pages().find((p) => p.url() === "about:blank" && ![...this.open.values()].some((o) => o.page === p));
         const page = blank ?? (await ctx.newPage());
         await page.goto(task.applyUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-        if (!(await waitForForm(page))) {
+        const multi = !!task.platform && MULTI_PAGE.includes(task.platform);
+        if (!multi && !(await waitForForm(page))) {
           await this.site.report(task.runId, "error", "The application form didn't appear. The job may be closed; check the tab in Chrome.");
           return;
         }
         const thanksBefore = SUBMITTED_TEXT.test(await bodyText(page));
         open = { page, task, resumePath, thanksBefore, url: page.url(), filled: [] };
+        if (multi) {
+          open.flow = { page, task, resumePath, autoNext: task.platform === "workday", starts: 0, resumeDone: false, pages: [], filled: [], sig: "", index: -1, status: null, busy: false };
+        }
         this.open.set(task.runId, open);
       } else {
-        log(`Filling your answers into ${label}`); // task.runAnswers now holds what you just answered
+        log(task.status === "answered" ? `Filling your answers into ${label}` : `Carrying on with ${label}`);
         open.task = task;
+        if (open.flow) open.flow.task = task;
       }
       await open.page.bringToFront();
+      if (open.flow) return await this.step(task.runId, open.flow, label);
       const { report, blocking } = await fillForm(open.page, task, open.resumePath);
       const fresh = new Set((report.filled ?? []).map((x) => x.label));
       open.filled = [...open.filled.filter((x) => !fresh.has(x.label)), ...(report.filled ?? [])];
@@ -131,7 +140,44 @@ class Helper {
     }
   }
 
-  /** Look at the open forms: submitted? closed? */
+  /** Move a multi-page form on and tell the site where it stands. */
+  private async step(runId: string, flow: Flow, label: string) {
+    flow.busy = true;
+    try {
+      const { status, message, report } = await advance(flow);
+      const now = await this.site.report(runId, status, message, report);
+      log(`${label}: ${message}`);
+      if (now === "cancelled") await this.forget(runId, "");
+    } finally {
+      flow.busy = false;
+    }
+  }
+
+  /**
+   * A multi-page form you're working on in Chrome: when you sign in, or move to a new page, the
+   * helper carries on. Going back to look at an earlier Workday page doesn't push you forward again.
+   */
+  private async follow(runId: string, o: Open) {
+    const flow = o.flow!;
+    if (flow.busy || !flow.status || !(["waiting", "needs_you", "review"] as RunStatus[]).includes(flow.status)) return;
+    const now = await look(o.page).catch(() => null);
+    if (!now || now.sig === flow.sig) return;
+    const forward = now.index < 0 || flow.index < 0 || now.index > flow.index;
+    const go = !now.gate && (!flow.autoNext || flow.status === "waiting" || (flow.status === "needs_you" && forward));
+    if (!go) {
+      flow.sig = now.sig;
+      flow.index = now.index;
+      return;
+    }
+    this.lastBusy = Date.now();
+    try {
+      await this.step(runId, flow, `${o.task.job.title} at ${o.task.job.company}`);
+    } catch (e) {
+      log(`${o.task.job.company}: couldn't carry on (${(e as Error).message.split("\n")[0]})`);
+    }
+  }
+
+  /** Look at the open forms: submitted? closed? moved on? */
   private async watch() {
     for (const [runId, o] of this.open) {
       if (o.page.isClosed()) {
@@ -147,7 +193,9 @@ class Helper {
         this.lastBusy = Date.now();
         log(`${o.task.job.company}: submitted. Marked as Applied in your tracker.`);
         await this.site.report(runId, "submitted", "Submitted.").catch(() => {});
+        continue;
       }
+      if (o.flow) await this.follow(runId, o);
     }
   }
 

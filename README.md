@@ -76,7 +76,14 @@ The prompts tell Claude to use **only** what's in your resume and to ask before 
 
 ## Autofill (the laptop helper)
 
-Fills Greenhouse, Lever and Ashby application forms in Chrome, about 40 of the followed companies plus any job whose link is on those sites. It needs Google Chrome on your laptop.
+Fills application forms in Chrome on your laptop (it needs Google Chrome):
+
+| Site | How it goes |
+|---|---|
+| **Greenhouse, Lever, Ashby** | One page, filled in one go. |
+| **Workday** (most banks and big tech) | It presses Apply and lets Workday read your resume. You sign in or create your account for that company in the Chrome window (it never types passwords or codes). Then it fills every page, presses Save and Continue, and stops at Review. |
+| **Any other company careers site** (Oracle, Microsoft, Amazon, Google…) | Guided: you press Apply and Next in Chrome; every form page is filled as soon as it appears. |
+| LinkedIn, Naukri, Indeed | Never: their rules forbid automated applying. |
 
 1. **Profile → Application answers:** fill in the questions forms always ask (notice period, CTC, work authorisation, college…). Your name, email, phone, city and links come from *About you*.
 2. **Settings → Laptop helper → Link a laptop**, then run the command it shows once, in this folder:
@@ -84,7 +91,7 @@ Fills Greenhouse, Lever and Ashby application forms in Chrome, about 40 of the f
    npm run helper -- connect https://<your-site> jhh_…
    ```
 3. Whenever you want to apply: `npm run helper` in this folder, then press **Autofill** on a job (also from your phone; it waits for the helper). A Chrome window opens and fills the form.
-4. Questions it can't answer show on the job page. Answer them there and they're typed in; tick *Remember* to reuse an answer on every future form.
+4. Questions it can't answer show on the job page. Answer them there and they're typed in; tick *Remember* to reuse an answer on every future form. Things only you can do (a consent box, a missing work-history entry) are listed too: do them in Chrome and press **Carry on**.
 5. Check the form in Chrome and press **Submit** yourself. The job moves to **Applied** in your tracker.
 
 The helper never presses Submit, never ticks agreements or consent boxes, and never types passwords. It stops by itself after 30 minutes with nothing to do (`HELPER_IDLE_MINUTES` changes that). Its files live in `~/.jobhunt-helper/`, including its own Chrome profile, separate from your everyday Chrome.
