@@ -400,6 +400,22 @@ your laptop doesn't run fetches too.
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
 
+### Autofill answers the usual questions too
+**Problem:** on a real Barclays application, autofill left date of birth, "How did you hear about
+us?" and simple yes/no questions ("worked at Barclays before?", "relatives here?") for you.
+**Change:** Profile → Application answers has more questions, grouped, with the usual yes/no
+answers pre-set (worked here before: No; relatives: No; non-compete: No; background check: Yes…)
+so you only change what's different for you; a **Fill from my resume** button suggests college,
+degree, branch, CGPA, graduation and current job from your resume. The helper now fills date
+fields (Workday's separate Month/Day/Year boxes, "DD/MM/YYYY" boxes, calendar pickers), lists
+with a second level ("Website" → "Barclays Careers Website"), and answers worded differently from
+yours ("Company careers site" = "Career Site" = "Corporate Website"). Long questions are matched
+on the sentence that actually asks ("Have you worked at Barclays? If you're an employee, apply
+internally." is about the first sentence).
+**Lesson:** a form's question is rarely worded like yours. Match meaning (groups of words that
+say the same thing) rather than exact text, and give people sensible defaults instead of a blank
+form to fill.
+
 ### Autofill for Workday and every other company site
 **Problem:** most companies followed here (46 of 94) use Workday, and autofill only knew
 one-page forms, so in practice it couldn't apply to a single job in the feed.

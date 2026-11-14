@@ -23,6 +23,9 @@ export interface FormField {
   hasFile?: boolean;
   /** Inside a Workday work-history, education, languages, skills or websites entry: left to the resume reader and you. */
   inSection?: boolean;
+  /** Date fields: the format a text box wants ("DD/MM/YYYY"), or the separate boxes Workday uses (m, d, y). */
+  dateFormat?: string;
+  dateParts?: string[];
 }
 
 export const SCAN_JS = String.raw`(() => {
@@ -109,6 +112,26 @@ export const SCAN_JS = String.raw`(() => {
       const v = el.tagName === "BUTTON" ? (/^select one$/i.test(txt(el)) ? "" : txt(el)) : (el.value || "").replace(/^(mm|yyyy|dd)$/i, "");
       const required = el.required || el.getAttribute("aria-required") === "true" || / required/i.test(el.getAttribute("aria-label") || "");
       out.push({ id: tag(el), kind: "text", label: (panelOf(el) ? panelOf(el) + " › " : "") + own, required, value: v.trim(), inSection: true });
+      continue;
+    }
+
+    // Workday's dates: separate Month / Day / Year boxes, one question.
+    const dateId = el.getAttribute("data-automation-id") || "";
+    const part = /dateSectionMonth/i.test(dateId) ? "m" : /dateSectionDay/i.test(dateId) ? "d" : /dateSectionYear/i.test(dateId) ? "y" : "";
+    if (part) {
+      const wrap = el.closest("[data-automation-id=dateInputWrapper], [data-automation-id^=formField-], fieldset") || el.parentElement;
+      if (doneGroups.has(wrap)) continue;
+      doneGroups.add(wrap);
+      const boxes = [...wrap.querySelectorAll("input[data-automation-id*=dateSection]")];
+      const parts = boxes.map((b) => {
+        const id = b.getAttribute("data-automation-id") || "";
+        const p = /Month/i.test(id) ? "m" : /Day/i.test(id) ? "d" : "y";
+        b.dataset.jhPart = p;
+        return p;
+      });
+      const t = titleOf(wrap.closest("[data-automation-id^=formField-], fieldset") || wrap);
+      const shown = boxes.map((b) => (b.value || "").replace(/^(mm|dd|yyyy)$/i, "")).join("");
+      out.push({ id: tag(wrap), kind: "date", label: t.text || labelOf(el).text, required: boxes.some((b) => b.getAttribute("aria-required") === "true") || starred(t.el), value: shown, dateParts: parts });
       continue;
     }
 
@@ -223,6 +246,11 @@ export const SCAN_JS = String.raw`(() => {
       const shown = shell && shell.querySelector(".select__single-value, [class*=singleValue], .select__multi-value");
       const multi = shell ? [...shell.querySelectorAll(".select__multi-value__label")].map(txt) : [];
       out.push({ id: tag(el), kind: "combobox", label: l.text, required, value: multi.length ? multi.join(", ") : shown ? txt(shown) : el.value.trim() });
+      continue;
+    }
+    const placeholder = el.getAttribute("placeholder") || "";
+    if (type === "date" || (/\b(dd|mm|yyyy)\b/i.test(placeholder) && /[\/.\-]/.test(placeholder))) {
+      out.push({ id: tag(el), kind: "date", label: l.text, required, value: (el.value || "").trim(), dateFormat: type === "date" ? "YYYY-MM-DD" : placeholder.toUpperCase() });
       continue;
     }
     const kind = el.tagName === "TEXTAREA" ? "textarea" : type === "number" ? "number" : "text";

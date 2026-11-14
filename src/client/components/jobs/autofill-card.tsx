@@ -342,6 +342,8 @@ function Questions({
                 <option key={o}>{o}</option>
               ))}
             </select>
+          ) : q.kind === "date" ? (
+            <input id={`afq-${i}`} type="date" className="field" value={values[q.label] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [q.label]: e.target.value }))} />
           ) : q.kind === "textarea" ? (
             <textarea id={`afq-${i}`} className="field min-h-24" value={values[q.label] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [q.label]: e.target.value }))} />
           ) : (

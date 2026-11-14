@@ -157,6 +157,25 @@ async function put(page: Page, f: FormField, answer: string, options: string[]):
     case "textarea":
       await el.fill(answer);
       return answer;
+    case "date": {
+      const iso = toIsoDate(answer);
+      if (!iso) return null;
+      const [y, m, d] = iso.split("-");
+      if (f.dateParts?.length) {
+        // Workday: type into each box (Month, Day, Year) in turn.
+        const digits: Record<string, string> = { m, d, y };
+        for (const p of f.dateParts) {
+          const box = page.locator(`[data-jh="${f.id}"] [data-jh-part="${p}"]`).first();
+          await box.click({ timeout: 4000 });
+          await box.pressSequentially(digits[p], { delay: 40 });
+        }
+        await page.keyboard.press("Tab").catch(() => {});
+      } else {
+        const format = f.dateFormat || "YYYY-MM-DD";
+        await el.fill(format.replace("YYYY", y).replace("MM", m).replace("DD", d));
+      }
+      return `${d}/${m}/${y}`;
+    }
     case "number": {
       const n = answer.match(/\d+(\.\d+)?/)?.[0];
       if (!n) return null;
@@ -252,6 +271,29 @@ async function pickInDropdown(page: Page, f: FormField, answer: string, options:
     return null;
   }
   await page.locator(`[data-jh-pick="${opts.indexOf(choice)}"]`).first().click({ timeout: 4000 });
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(700);
+  // Some lists have a second level (Workday: "Website" → "Barclays Careers Website"): pick there too.
+  const sub = (await page.evaluate(`${OPTIONS_JS}(${JSON.stringify(f.id)})`)) as string[];
+  if (sub.length && !sub.includes(choice)) {
+    const second = pickOption(answer, sub) ?? sub.find((o) => !/^other\b/i.test(o)) ?? null;
+    if (second) {
+      await page.locator(`[data-jh-pick="${sub.indexOf(second)}"]`).first().click({ timeout: 4000 });
+      await page.waitForTimeout(300);
+      await page.keyboard.press("Escape").catch(() => {});
+      return `${choice} › ${second}`;
+    }
+    await page.keyboard.press("Escape").catch(() => {});
+  }
   return choice;
+}
+
+/** "1999-08-15", "15 Aug 1999", "Immediately" (today) → "1999-08-15"; null when it isn't a date. */
+function toIsoDate(answer: string): string | null {
+  const a = answer.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(a)) return a;
+  const at = /immediate|asap|right away|now/i.test(a) ? Date.now() : Date.parse(a);
+  if (Number.isNaN(at)) return null;
+  const d = new Date(at);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }

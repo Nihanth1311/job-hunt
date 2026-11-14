@@ -91,39 +91,71 @@ function boardFromUrl(link: string | null | undefined): { platform: AutofillPlat
 export interface AnswerField {
   key: string;
   label: string;
+  /** Which part of Profile → Application answers it sits in. */
+  group: AnswerGroup;
   placeholder?: string;
   /** Shown as a dropdown when set. */
   options?: string[];
+  /** The usual answer, used until you change it (shown pre-selected on the Profile page). */
+  default?: string;
+  /** A date, kept as YYYY-MM-DD and written in whatever format each form wants. */
+  type?: "date";
   hint?: string;
 }
 
+export const ANSWER_GROUPS = ["About you", "Usual yes/no questions", "Work", "Education", "Address", "Diversity (optional)"] as const;
+export type AnswerGroup = (typeof ANSWER_GROUPS)[number];
+
 const YES_NO = ["Yes", "No"];
+const NO_YES = ["No", "Yes"];
 const DECLINE = "Prefer not to say";
 
 /** Questions application forms ask again and again. Your contact details come from About you. */
 export const ANSWER_FIELDS: AnswerField[] = [
-  { key: "workAuthorization", label: "Authorised to work in India?", options: YES_NO },
-  { key: "needsSponsorship", label: "Need visa sponsorship?", options: ["No", "Yes"] },
-  { key: "willingToRelocate", label: "Willing to relocate?", options: YES_NO },
-  { key: "openToOffice", label: "OK with hybrid or in-office work?", options: YES_NO },
-  { key: "noticePeriod", label: "Notice period", placeholder: "Immediate, 30 days, 60 days…" },
-  { key: "earliestStart", label: "Earliest start date", placeholder: "Immediately, or 1 March 2027" },
-  { key: "currentCtc", label: "Current CTC (LPA)", placeholder: "8", hint: "Left blank, salary questions are asked each time." },
-  { key: "expectedCtc", label: "Expected CTC (LPA)", placeholder: "12" },
-  { key: "addressLine1", label: "Street address", placeholder: "Flat, street, area", hint: "Workday forms ask for an address." },
-  { key: "postalCode", label: "PIN code", placeholder: "500081" },
-  { key: "state", label: "State", placeholder: "Telangana" },
-  { key: "currentCompany", label: "Current company" },
-  { key: "currentTitle", label: "Current job title" },
-  { key: "college", label: "College or university" },
-  { key: "degree", label: "Degree", placeholder: "B.Tech" },
-  { key: "discipline", label: "Branch or major", placeholder: "Computer Science" },
-  { key: "cgpa", label: "CGPA", placeholder: "8.4" },
-  { key: "graduation", label: "Graduation (month and year)", placeholder: "May 2023" },
-  { key: "howHeard", label: "How you heard about the job", placeholder: "Company careers page" },
-  { key: "gender", label: "Gender (optional)", options: ["Male", "Female", "Non-binary", DECLINE] },
-  { key: "disability", label: "Disability (optional)", options: ["No", "Yes", DECLINE] },
+  { key: "dob", label: "Date of birth", group: "About you", type: "date" },
+  { key: "nationality", label: "Nationality", group: "About you", default: "Indian" },
+  { key: "howHeard", label: "How you heard about jobs", group: "About you", default: "Company careers site", hint: "Matched to each form's wording, e.g. “Barclays Careers Website”." },
+
+  { key: "workAuthorization", label: "Authorised to work in India?", group: "Usual yes/no questions", options: YES_NO, default: "Yes" },
+  { key: "needsSponsorship", label: "Need visa sponsorship?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
+  { key: "workedHereBefore", label: "Worked at the company you're applying to before?", group: "Usual yes/no questions", options: NO_YES, default: "No", hint: "If you have worked at one, Remember a different answer for that company when it asks." },
+  { key: "appliedBefore", label: "Applied to the same company before?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
+  { key: "relativesHere", label: "Relatives or family working at the company?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
+  { key: "boundByAgreement", label: "Bound by a non-compete or employment agreement?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
+  { key: "governmentOfficial", label: "A government official, or related to one?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
+  { key: "criminalRecord", label: "Any criminal conviction?", group: "Usual yes/no questions", options: NO_YES, default: "No" },
+  { key: "backgroundCheck", label: "OK with a background check?", group: "Usual yes/no questions", options: YES_NO, default: "Yes" },
+  { key: "willingToRelocate", label: "Willing to relocate?", group: "Usual yes/no questions", options: YES_NO },
+  { key: "openToOffice", label: "OK with hybrid or in-office work?", group: "Usual yes/no questions", options: YES_NO },
+  { key: "openToShifts", label: "OK with shifts (night or rotational)?", group: "Usual yes/no questions", options: YES_NO },
+
+  { key: "currentCompany", label: "Current company", group: "Work", hint: "Empty if you're not working now." },
+  { key: "currentTitle", label: "Current job title", group: "Work" },
+  { key: "noticePeriod", label: "Notice period", group: "Work", placeholder: "Immediate, 30 days, 60 days…" },
+  { key: "earliestStart", label: "Earliest start date", group: "Work", placeholder: "Immediately, or 1 March 2027" },
+  { key: "currentCtc", label: "Current CTC (LPA)", group: "Work", placeholder: "8", hint: "Left blank, salary questions are asked each time." },
+  { key: "expectedCtc", label: "Expected CTC (LPA)", group: "Work", placeholder: "12" },
+
+  { key: "college", label: "College or university", group: "Education" },
+  { key: "degree", label: "Degree", group: "Education", placeholder: "B.Tech" },
+  { key: "discipline", label: "Branch or major", group: "Education", placeholder: "Computer Science" },
+  { key: "cgpa", label: "CGPA", group: "Education", placeholder: "8.4" },
+  { key: "graduation", label: "Graduation (month and year)", group: "Education", placeholder: "May 2023" },
+  { key: "twelfth", label: "Class 12 percentage", group: "Education", placeholder: "92%" },
+  { key: "tenth", label: "Class 10 percentage", group: "Education", placeholder: "95%" },
+
+  { key: "addressLine1", label: "Street address", group: "Address", placeholder: "Flat, street, area", hint: "Workday forms ask for an address." },
+  { key: "postalCode", label: "PIN code", group: "Address", placeholder: "500081" },
+  { key: "state", label: "State", group: "Address", placeholder: "Telangana" },
+
+  { key: "gender", label: "Gender", group: "Diversity (optional)", options: ["Male", "Female", "Non-binary", DECLINE] },
+  { key: "disability", label: "Disability", group: "Diversity (optional)", options: ["No", "Yes", DECLINE] },
 ];
+
+const DEFAULTS: Record<string, string> = Object.fromEntries(ANSWER_FIELDS.filter((f) => f.default).map((f) => [f.key, f.default!]));
+
+/** Your answer to one of the questions above: what you saved, else the usual answer. */
+export const answerOf = (fields: AnswerFields, key: string): string => fields[key]?.trim() || DEFAULTS[key] || "";
 
 export type AnswerKey = string;
 export type AnswerFields = Record<AnswerKey, string>;
@@ -179,7 +211,7 @@ export function contactFromProfile(p: Profile): Contact {
 
 // ---------- What the helper reports ----------
 
-export type FieldKind = "text" | "textarea" | "number" | "select" | "radio" | "checkbox" | "combobox" | "file";
+export type FieldKind = "text" | "textarea" | "number" | "date" | "select" | "radio" | "checkbox" | "combobox" | "file";
 
 /** A question found on the form that the helper couldn't answer. */
 export interface AutofillQuestion {
@@ -263,13 +295,20 @@ const P = (re: RegExp, pick: keyof Contact | ((c: Ctx) => string | null)): Rule 
 const B = (re: RegExp, key: string): Rule => ({
   re,
   pick: (c) => {
-    const v = c.fields[key]?.trim();
+    const v = answerOf(c.fields, key);
     if (!v) return null;
     return /ctc/i.test(key) && /^\d+(\.\d+)?$/.test(v) ? `${v} LPA` : v;
   },
   from: "bank",
 });
 const SKIPPED = (re: RegExp): Rule => ({ re, pick: () => SKIP, from: "bank" });
+
+/** "Are you 18 or older?": yes when your date of birth says so, or when it isn't saved. */
+function adult(dob: string): string {
+  const born = Date.parse(dob);
+  if (Number.isNaN(born)) return "Yes";
+  return Date.now() - born >= 18 * 365.25 * 86_400_000 ? "Yes" : "No";
+}
 
 /** Agreements, consent and attestations: never answered for you. */
 const AGREEMENT = /\b(i agree|agree to|consent|acknowledge|certify|attest|i understand|terms (and|&) conditions|privacy (policy|notice)|declare that|confirm that)\b/;
@@ -292,6 +331,21 @@ const RULES: Rule[] = [
   P(/linkedin/, "linkedin"),
   P(/github/, "github"),
   P(/portfolio|personal (website|site)|^website|other website|\bblog\b/, "portfolio"),
+  // The usual yes/no questions, worded every way companies word them.
+  B(/date of birth|\bdob\b|birth ?date|born on/, "dob"),
+  P(/\b18\b.{0,20}(years|older|age)|legal (working )?age|age of majority/, (c) => adult(answerOf(c.fields, "dob"))),
+  B(/(previously|ever|before|formerly|in the past|prior).{0,40}(work|employ|consult|intern)|(work|employ|consult).{0,40}(before|previously|in the past)|former (employee|worker|intern)|ex employee|rehire/, "workedHereBefore"),
+  B(/(previously|ever|already|before) appl(y|ied)|appl(y|ied) .{0,40}(before|previously|in the past|last \d+ months)/, "appliedBefore"),
+  B(/relative|family member|related to (any|an?) |spouse|immediate family|know (anyone|someone) .{0,20}work/, "relativesHere"),
+  B(/non ?compete|non ?solicit|restrictive covenant|employment agreements?|post ?employment restriction|bound by/, "boundByAgreement"),
+  B(/government (official|employee|entity)|public official|politically exposed|\bpep\b|public office|government owned/, "governmentOfficial"),
+  B(/convicted|criminal|felony|pending (criminal )?charges/, "criminalRecord"),
+  B(/background (check|verification|screening)|drug (test|screen)/, "backgroundCheck"),
+  B(/\bshifts?\b|night shift|rotational/, "openToShifts"),
+  P(/currently (employed|working)|are you (currently )?employed/, (c) => (answerOf(c.fields, "currentCompany") ? "Yes" : "No")),
+  B(/nationality|citizenship/, "nationality"),
+  B(/\b10th\b|class (x|10)\b|\bssc\b|secondary school/, "tenth"),
+  B(/\b12th\b|class (xii|12)\b|\bhsc\b|intermediate|higher secondary|pre university|\bpuc\b/, "twelfth"),
   B(/sponsor/, "needsSponsorship"),
   B(/authori[sz]ed to work|legally (eligible|authori[sz]ed|able)|entitled to work|right to work|work permit|eligible to work/, "workAuthorization"),
   B(/relocat/, "willingToRelocate"),
@@ -340,25 +394,34 @@ export function decide(
   const own = ctx.runAnswers[n] ?? ctx.runAnswers[label];
   if (own !== undefined) return { value: own, from: "this form" };
   const learned = ctx.bank.learned[n] ?? closest(n, ctx.bank.learned);
-  // A long question is mostly background; the rules look only at its last sentence, the actual question.
-  const q = normQuestion(lastSentence(label), ctx.company) || n;
-  if (AGREEMENT.test(q)) return { value: null, agreement: true };
+  // A long question is mostly background: the rules look at its actual question (the sentence
+  // ending in "?", else the last sentence), and only then at the whole text.
+  const asks = questionParts(label).map((p) => normQuestion(p, ctx.company)).filter(Boolean);
+  const q = asks[0] ?? n;
+  if (asks.some((a) => AGREEMENT.test(a))) return { value: null, agreement: true };
   if (learned !== undefined) return { value: learned, from: "learned" };
   if (DECLINE_ONLY.test(q)) return { value: DECLINE, from: "bank" };
-  for (const rule of RULES) {
-    if (!rule.re.test(q)) continue;
-    const v = rule.pick({ contact: ctx.contact, fields: ctx.bank.fields });
-    if (v === SKIP) return { value: null, skip: true };
-    return v === null ? { value: null } : { value: v, from: rule.from };
+  for (const text of [...asks, n]) {
+    for (const rule of RULES) {
+      if (!rule.re.test(text)) continue;
+      const v = rule.pick({ contact: ctx.contact, fields: ctx.bank.fields });
+      if (v === SKIP) return { value: null, skip: true };
+      return v === null ? { value: null } : { value: v, from: rule.from };
+    }
   }
   return { value: null };
 }
 
-/** "We work from our offices on Mondays… Are you able to commit to that?" → "Are you able to commit to that?" */
-function lastSentence(label: string): string {
-  if (label.length < 120) return label;
+/**
+ * The parts of a long question that actually ask something: the sentence ending in "?" and the
+ * last sentence. "We work from our offices… Are you able to commit to that?" → the last one;
+ * "Have you worked at Barclays? If you're an employee, apply internally." → the first one.
+ */
+function questionParts(label: string): string[] {
+  if (label.length < 120) return [label];
   const parts = label.split(/(?<=[.?!])\s+/).filter((p) => p.trim());
-  return parts[parts.length - 1] ?? label;
+  const asked = parts.find((p) => p.trim().endsWith("?"));
+  return [...new Set([asked, parts[parts.length - 1]].filter((p): p is string => !!p))];
 }
 
 /** A remembered question worded a little differently ("…before?" vs "…previously?"). */
@@ -426,9 +489,27 @@ export function pickOption(answer: string, options: string[]): string | null {
     const withNum = opts.filter((o) => new RegExp(`(^|[^0-9.])${num.replace(".", "\\.")}([^0-9.]|$)`).test(o));
     if (withNum.length === 1) return withNum[0];
   }
+  // Same thing, different words: "Company careers site" is "Barclays Careers Website", "Career Site", "Website"…
+  for (const group of SAME_THING) {
+    if (!group.test(answer)) continue;
+    const match = opts.find((o) => group.test(o));
+    if (match) return match;
+  }
   const scored = opts.map((o) => ({ o, s: similarity(a, simple(o)) })).sort((x, y) => y.s - x.s);
   return scored[0].s >= 0.75 ? scored[0].o : null;
 }
+
+/** Answers that forms word differently. Order matters: the more specific groups come first. */
+const SAME_THING = [
+  /linked ?in/i,
+  /naukri/i,
+  /indeed/i,
+  /glassdoor/i,
+  /refer(red|ral)?\b|employee referral/i,
+  /career|company (web ?)?site|corporate (web ?)?site|employer (web ?)?site|\bwebsite\b|careers? page|job site/i,
+  /job (board|portal|site)|online job/i,
+  /campus|university|college/i,
+];
 
 /** Questions about this company in particular ("Why Stripe?"): kept for this form, not remembered by default. */
 export function isCompanySpecific(label: string, company: string): boolean {
@@ -446,4 +527,67 @@ export interface AutofillRunView {
   updatedAt: string;
   /** Changes whenever the run does, so the page can ask "anything new?" cheaply. */
   version: number;
+}
+
+// ---------- Suggestions from your resume ----------
+
+const MONTH = "(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?";
+const JOB_WORD = /\b(engineer|developer|analyst|intern|scientist|consultant|manager|associate|architect|designer|lead|administrator|specialist|programmer|sde)\b/i;
+
+/**
+ * Best guesses for the Education and Work answers, read from your resume text (plain text or
+ * LaTeX). Only suggestions: the Profile page puts them in empty boxes for you to check and save.
+ */
+export function suggestFromResume(resume: string): Partial<AnswerFields> {
+  const text = resume
+    .replace(/\\[a-zA-Z]+\*?(\[[^\]]*\])?/g, " ") // LaTeX commands
+    .replace(/[{}$\\]/g, " ")
+    .replace(/[ \t]+/g, " ");
+  const lines = text
+    .split(/\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const out: Partial<AnswerFields> = {};
+
+  const collegeLine = lines.find((l) => /\b(university|institute|college|iit|nit|iiit|bits|school of)\b/i.test(l) && l.length < 140);
+  if (collegeLine) {
+    out.college = collegeLine
+      .replace(new RegExp(`${MONTH}\\s*\\d{4}.*$`, "i"), "")
+      .replace(/\b(19|20)\d{2}\b.*$/, "")
+      .replace(/\s*[|,–—-]\s*$/, "")
+      .trim();
+  }
+  const degree = text.match(/\b(b\.?\s?tech|b\.?\s?e\b|bachelor of [a-z]+|bachelor'?s|m\.?\s?tech|master of [a-z]+|master'?s|b\.?\s?sc|m\.?\s?sc|mca|bca|mba|b\.?com)\b/i);
+  if (degree) out.degree = degree[0].replace(/\s+/g, " ").trim();
+  const branch = text.match(/\b(computer science( and| &)? engineering|computer science|information technology|electronics( and| &)? communication( engineering)?|electrical( and| &)? electronics( engineering)?|electrical engineering|mechanical engineering|civil engineering|data science|artificial intelligence( and| &)? (machine learning|data science))\b/i);
+  if (branch) out.discipline = branch[0].replace(/\s+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bAnd\b/g, "and");
+  const gpa = text.match(/\b(?:c?gpa|cpi)\s*[:\-]?\s*(\d{1,2}(?:\.\d{1,2})?)/i) ?? text.match(/\b(\d\.\d{1,2})\s*\/\s*10\b/);
+  if (gpa) out.cgpa = gpa[1];
+
+  // Graduation: the latest month-year (or year) on the college's lines.
+  if (collegeLine) {
+    const i = lines.indexOf(collegeLine);
+    const near = lines.slice(i, i + 3).join(" ");
+    const dates = [...near.matchAll(new RegExp(`(${MONTH})\\s*((?:19|20)\\d{2})`, "gi"))];
+    const years = [...near.matchAll(/\b((?:19|20)\d{2})\b/g)];
+    if (dates.length) {
+      const d = dates[dates.length - 1];
+      out.graduation = `${d[1].slice(0, 3).replace(/^\w/, (c) => c.toUpperCase())} ${d[d.length - 1]}`;
+    } else if (years.length) out.graduation = years[years.length - 1][1];
+  }
+
+  // Current job: the line that says "Present" (or the line just before it holds the title or company).
+  const nowAt = lines.findIndex((l) => /\b(present|current|till date|to date|now)\b/i.test(l) && /\b(19|20)\d{2}\b/.test(l));
+  if (nowAt >= 0) {
+    const around = [lines[nowAt], lines[nowAt - 1] ?? "", lines[nowAt + 1] ?? ""];
+    const parts = around
+      .flatMap((l) => l.split(/\s+[|–—]\s+|\s+-\s+|,\s+|\s+at\s+/i))
+      .map((p) => p.replace(new RegExp(`${MONTH}\\s*\\d{4}|\\b(19|20)\\d{2}\\b|present|current|till date|to date`, "gi"), "").replace(/[\s–—-]+$/, "").trim())
+      .filter((p) => p.length > 1 && p.length < 70 && !/remote|india|bengaluru|bangalore|hyderabad|pune|chennai|mumbai|delhi|gurgaon|noida/i.test(p));
+    const title = parts.find((p) => JOB_WORD.test(p));
+    const company = parts.find((p) => p !== title && !JOB_WORD.test(p) && /[A-Za-z]/.test(p));
+    if (title) out.currentTitle = title;
+    if (company) out.currentCompany = company;
+  }
+  return out;
 }
