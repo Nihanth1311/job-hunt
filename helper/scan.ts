@@ -21,8 +21,8 @@ export interface FormField {
   buttons?: boolean;
   /** A file field that already holds a file. */
   hasFile?: boolean;
-  /** Inside a Workday work-history, education, languages, skills or websites entry: left to the resume reader and you. */
-  inSection?: boolean;
+  /** Inside a Workday repeating entry: "work" (work experience), "education", or "other" (languages, skills, websites). */
+  inSection?: "work" | "education" | "other";
   /** Date fields: the format a text box wants ("DD/MM/YYYY"), or the separate boxes Workday uses (m, d, y). */
   dateFormat?: string;
   dateParts?: string[];
@@ -106,16 +106,12 @@ export const SCAN_JS = String.raw`(() => {
     if (inMenu(el)) continue;
     if (el.getAttribute("data-automation-id") === "beecatcher") continue; // Workday's trap for bots
     const type = (el.getAttribute("type") || el.tagName).toLowerCase();
+    // Inside a Workday entry (Work Experience 1, Education 1…): say which, and name the entry in the label.
     const section = type === "file" ? null : sectionOf(el);
-    if (section) {
-      // Report only what's required and still empty; you or the resume reader fill these.
-      if (!vis(el) || type === "checkbox" || type === "radio") continue;
-      const own = el.tagName === "BUTTON" ? (el.getAttribute("aria-label") || "").replace(/\s*(select one|required).*$/i, "") : labelOf(el).text;
-      const v = el.tagName === "BUTTON" ? (/^select one$/i.test(txt(el)) ? "" : txt(el)) : (el.value || "").replace(/^(mm|yyyy|dd)$/i, "");
-      const required = el.required || el.getAttribute("aria-required") === "true" || / required/i.test(el.getAttribute("aria-label") || "");
-      out.push({ id: tag(el), kind: "text", label: (panelOf(el) ? panelOf(el) + " › " : "") + own, required, value: v.trim(), inSection: true });
-      continue;
-    }
+    const sectionId = section ? section.getAttribute("aria-labelledby") || "" : "";
+    const sectionKind = !section ? "" : /work/i.test(sectionId) ? "work" : /education/i.test(sectionId) ? "education" : "other";
+    const panel = section ? panelOf(el) : "";
+    const add = (o) => out.push(section ? { ...o, inSection: sectionKind, label: (panel ? panel + " › " : "") + o.label } : o);
 
     // Workday's dates: separate Month / Day / Year boxes, one question.
     const dateId = el.getAttribute("data-automation-id") || "";
@@ -133,7 +129,7 @@ export const SCAN_JS = String.raw`(() => {
       });
       const t = titleOf(wrap.closest("[data-automation-id^=formField-], fieldset") || wrap);
       const shown = boxes.map((b) => (b.value || "").replace(/^(mm|dd|yyyy)$/i, "")).join("");
-      out.push({ id: tag(wrap), kind: "date", label: t.text || labelOf(el).text, required: boxes.some((b) => b.getAttribute("aria-required") === "true") || starred(t.el), value: shown, dateParts: parts });
+      add({ id: tag(wrap), kind: "date", label: t.text || labelOf(el).text, required: boxes.some((b) => b.getAttribute("aria-required") === "true") || starred(t.el), value: shown, dateParts: parts });
       continue;
     }
 
@@ -144,7 +140,7 @@ export const SCAN_JS = String.raw`(() => {
       const l = labelOf(el);
       const label = l.text || "(a question without a label: see the form in Chrome)";
       const shown = txt(el);
-      out.push({
+      add({
         id: tag(el),
         kind: "combobox",
         label,
@@ -159,7 +155,7 @@ export const SCAN_JS = String.raw`(() => {
       const l = labelOf(el);
       const holder = el.closest("[data-automation-id^=formField-]") || boxOf(el);
       const chosen = holder ? [...holder.querySelectorAll("[data-automation-id=selectedItemList] [data-automation-id=menuItem], [data-automation-id=selectedItem]")].map(txt) : [];
-      out.push({ id: tag(el), kind: "combobox", label: l.text, required: el.getAttribute("aria-required") === "true" || starred(l.el), value: chosen.join(", ") });
+      add({ id: tag(el), kind: "combobox", label: l.text, required: el.getAttribute("aria-required") === "true" || starred(l.el), value: chosen.join(", ") });
       continue;
     }
 
@@ -174,7 +170,7 @@ export const SCAN_JS = String.raw`(() => {
       btns.forEach((b, i) => (b.dataset.jhOpt = String(i)));
       const t = titleOf(box);
       const picked = btns.find((b) => b.getAttribute("aria-pressed") === "true");
-      out.push({ id, kind: "radio", label: t.text, required: starred(t.el), value: picked ? txt(picked) : "", options: btns.map(txt), buttons: true });
+      add({ id, kind: "radio", label: t.text, required: starred(t.el), value: picked ? txt(picked) : "", options: btns.map(txt), buttons: true });
       continue;
     }
 
@@ -185,7 +181,7 @@ export const SCAN_JS = String.raw`(() => {
     if (type === "file") {
       const box = boxOf(el);
       const zone = el.closest("[data-automation-id^=formField-], [data-automation-id*=attachment i], [data-automation-id*=resume i]") || box;
-      out.push({
+      add({
         id: tag(el),
         kind: "file",
         label: labelOf(el).text,
@@ -218,9 +214,9 @@ export const SCAN_JS = String.raw`(() => {
       const required = opts.some((o) => o.required || o.getAttribute("aria-required") === "true") || starred(t.el);
       if (type === "checkbox" && opts.length === 1) {
         // A single box to tick: its own text is the question ("I agree to…", "Yes, contact me").
-        out.push({ id, kind: "checkbox", label: names[0] || t.text, required, value: opts[0].checked ? "checked" : "" });
+        add({ id, kind: "checkbox", label: names[0] || t.text, required, value: opts[0].checked ? "checked" : "" });
       } else {
-        out.push({
+        add({
           id,
           kind: type,
           label: t.text || names.join(" / "),
@@ -239,7 +235,7 @@ export const SCAN_JS = String.raw`(() => {
     if (el.tagName === "SELECT") {
       const options = [...el.options].filter((o) => o.value !== "" && txt(o)).map(txt);
       const chosen = el.selectedOptions[0];
-      out.push({ id: tag(el), kind: "select", label: l.text, required, value: chosen && chosen.value !== "" ? txt(chosen) : "", options });
+      add({ id: tag(el), kind: "select", label: l.text, required, value: chosen && chosen.value !== "" ? txt(chosen) : "", options });
       continue;
     }
     if (el.getAttribute("role") === "combobox") {
@@ -247,16 +243,16 @@ export const SCAN_JS = String.raw`(() => {
       const shell = el.closest(".select-shell, .select__control, [data-field-path], .field-wrapper") || box;
       const shown = shell && shell.querySelector(".select__single-value, [class*=singleValue], .select__multi-value");
       const multi = shell ? [...shell.querySelectorAll(".select__multi-value__label")].map(txt) : [];
-      out.push({ id: tag(el), kind: "combobox", label: l.text, required, value: multi.length ? multi.join(", ") : shown ? txt(shown) : el.value.trim() });
+      add({ id: tag(el), kind: "combobox", label: l.text, required, value: multi.length ? multi.join(", ") : shown ? txt(shown) : el.value.trim() });
       continue;
     }
     const placeholder = el.getAttribute("placeholder") || "";
     if (type === "date" || (/\b(dd|mm|yyyy)\b/i.test(placeholder) && /[\/.\-]/.test(placeholder))) {
-      out.push({ id: tag(el), kind: "date", label: l.text, required, value: (el.value || "").trim(), dateFormat: type === "date" ? "YYYY-MM-DD" : placeholder.toUpperCase() });
+      add({ id: tag(el), kind: "date", label: l.text, required, value: (el.value || "").trim(), dateFormat: type === "date" ? "YYYY-MM-DD" : placeholder.toUpperCase() });
       continue;
     }
     const kind = el.tagName === "TEXTAREA" ? "textarea" : type === "number" ? "number" : "text";
-    out.push({ id: tag(el), kind, label: l.text, required, value: (el.value || "").trim() });
+    add({ id: tag(el), kind, label: l.text, required, value: (el.value || "").trim() });
   }
   return out;
 })()`;

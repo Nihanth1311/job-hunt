@@ -400,6 +400,19 @@ your laptop doesn't run fetches too.
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
 
+### Work history, education, and "1 year" is not "11+"
+**Problem:** on a real Workday form, "How many years of relevant experience?" got "11+ Years" for
+someone with 1 year (the answer "1" was taken as the start of "11+"), and the Work Experience and
+Education entries stayed empty because they were left to Workday's resume reader.
+**Change:** a number picks the option whose range holds it, the tightest one, and where two ranges
+meet ("0-1", "1-3") the one starting at your number. The first Work Experience entry is filled with
+your current job (title, company, city, "I currently work here", start date) and the first
+Education entry with your degree (school, "B.Tech" matched to "Bachelor's Degree", field of study
+in Workday's search box, GPA). New answers: when you started your current job, your industry,
+"Identify as LGBTQ+?" (No when your orientation is heterosexual); "highest education and
+stream?" is written from your degree; "how soon can you join?" uses your notice period.
+**Lesson:** "starts with" is a fine way to match words and a wrong way to match numbers.
+
 ### Resume names, every resume in one list, rejected jobs cleared
 **What:** resumes are named "role type · company · job title" ("FE · Stripe · Frontend Engineer",
 "BE · Base"); a one-off migration ([0009_rename_resumes.sql](../drizzle/0009_rename_resumes.sql))

@@ -3,7 +3,7 @@
 // answer, or mustn't (agreements), goes back to you on the site. It never presses Submit.
 
 import type { Page } from "playwright-core";
-import { decide, pickOption, type AutofillQuestion, type AutofillReport, type HelperTask } from "../src/shared/autofill";
+import { answerOf, decide, pickOption, type AutofillQuestion, type AutofillReport, type Decision, type HelperTask } from "../src/shared/autofill";
 import { OPTIONS_JS, SCAN_JS, type FormField } from "./scan";
 
 export interface FillResult {
@@ -117,13 +117,20 @@ async function fillField(
     return;
   }
   if (f.value) return; // already answered: never overwrite
+  let d: Decision;
   if (f.inSection) {
-    // Work history, education…: Workday fills these from your resume; what's still missing is yours.
-    if (f.required) questions.push({ label: `${label} (fill in Chrome)`, kind: f.kind, required: true, manual: true });
-    return;
+    // Workday's Work Experience and Education entries: the first of each from your Profile;
+    // anything else still required is yours to fill in Chrome.
+    const v = entryAnswer(f, ctx.bank.fields, ctx.contact.city);
+    if (v === SKIP_ENTRY) return;
+    if (v === null) {
+      if (f.required) questions.push({ label: `${label} (fill in Chrome)`, kind: f.kind, required: true, manual: true });
+      return;
+    }
+    d = { value: v, from: "bank" };
+  } else {
+    d = decide(label, ctx);
   }
-
-  const d = decide(label, ctx);
   if (d.skip) return;
   if (d.agreement) {
     questions.push({ label, kind: f.kind, required: f.required, agreement: true });
@@ -147,6 +154,38 @@ async function fillField(
     notes.push(`Couldn't fill “${short(label)}” (${(e as Error).message.split("\n")[0]}).`);
     questions.push({ label, kind: f.kind, required: f.required, options: options?.length ? options : undefined });
   }
+}
+
+const SKIP_ENTRY = "\u0000skip";
+
+/**
+ * The answer for a field in a Workday entry, from Profile → Application answers: your current job
+ * in Work Experience 1, your degree in Education 1. null when it isn't known (or it's a later entry).
+ */
+function entryAnswer(f: FormField, fields: Record<string, string>, city: string): string | null {
+  const [entry, ...rest] = f.label.split(" › ");
+  const field = (rest.join(" › ") || entry).toLowerCase();
+  const first = /\b1$/.test(entry.trim());
+  const a = (k: string) => answerOf(fields, k) || null;
+  if (f.inSection === "work" && first) {
+    const working = !!a("currentCompany");
+    if (/currently work/.test(field)) return working ? "Yes" : "No";
+    if (/job title|^title|position|role$/.test(field)) return a("currentTitle");
+    if (/company|employer|organi[sz]ation/.test(field)) return a("currentCompany");
+    if (/location|city/.test(field)) return city || null;
+    if (/^from|start/.test(field)) return a("currentSince");
+    if (/^to\b|end/.test(field)) return working ? SKIP_ENTRY : null;
+    if (/description|responsibilit/.test(field)) return SKIP_ENTRY;
+  }
+  if (f.inSection === "education" && first) {
+    if (/school|university|college|institution/.test(field)) return a("college");
+    if (/degree|qualification/.test(field)) return a("degree");
+    if (/field of study|major|discipline|speciali[sz]ation|branch/.test(field)) return a("discipline");
+    if (/gpa|grade|result|score|percentage/.test(field)) return a("cgpa");
+    if (/^to\b|end|graduat|completion/.test(field)) return a("graduation");
+    if (/^from|start/.test(field)) return SKIP_ENTRY;
+  }
+  return null;
 }
 
 /** Put one answer in one field. Returns what it now shows, or null when the answer doesn't fit. */

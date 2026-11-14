@@ -138,6 +138,8 @@ export const ANSWER_FIELDS: AnswerField[] = [
 
   { key: "currentCompany", label: "Current company", group: "Work", hint: "Empty if you're not working now." },
   { key: "currentTitle", label: "Current job title", group: "Work" },
+  { key: "currentSince", label: "Started current job (month and year)", group: "Work", placeholder: "Jul 2023" },
+  { key: "industry", label: "Industry you work in", group: "Work", placeholder: "Information Technology" },
   { key: "noticePeriod", label: "Notice period", group: "Work", placeholder: "Immediate, 30 days, 60 days…" },
   { key: "earliestStart", label: "Earliest start date", group: "Work", placeholder: "Immediately, or 1 March 2027" },
   { key: "currentCtc", label: "Current CTC (LPA)", group: "Work", placeholder: "8", hint: "Left blank, salary questions are asked each time." },
@@ -162,6 +164,13 @@ export const ANSWER_FIELDS: AnswerField[] = [
     group: "Diversity (optional)",
     options: ["Asian", "White", "Black or African American", "Hispanic or Latino", "Two or more races", DECLINE],
     hint: "Matched to each form's wording, e.g. “Asian (India)”. Empty: “decline” is chosen.",
+  },
+  {
+    key: "lgbtq",
+    label: "Identify as LGBTQ+?",
+    group: "Diversity (optional)",
+    options: ["No", "Yes", DECLINE],
+    hint: "Empty: No when your orientation is heterosexual, else “decline”.",
   },
   { key: "orientation", label: "Sexual orientation", group: "Diversity (optional)", options: ["Heterosexual / straight", "Gay or lesbian", "Bisexual", DECLINE], hint: "Empty: “decline” is chosen." },
   { key: "disability", label: "Disability", group: "Diversity (optional)", options: ["No", "Yes", DECLINE] },
@@ -355,6 +364,11 @@ const RULES: Rule[] = [
     return !e || e === DECLINE ? DECLINE : /hispanic|latin/i.test(e) ? "Yes" : "No";
   }),
   P(/\brace\b|ethnic/, (c) => answerOf(c.fields, "ethnicity") || DECLINE),
+  P(/lgbt|queer|sexual (or gender )?minorit|transgender|gender (non ?conforming|minority)/, (c) => {
+    const own = answerOf(c.fields, "lgbtq");
+    if (own) return own;
+    return /heterosexual|straight/i.test(answerOf(c.fields, "orientation")) ? "No" : DECLINE;
+  }),
   P(/sexual orientation|\borientation\b|sexuality/, (c) => answerOf(c.fields, "orientation") || DECLINE),
   P(/veteran/, () => DECLINE),
   // The usual yes/no questions, worded every way companies word them. Specific before general.
@@ -378,6 +392,13 @@ const RULES: Rule[] = [
   B(/nationality|citizenship/, "nationality"),
   B(/\b10th\b|class (x|10)\b|\bssc\b|secondary school/, "tenth"),
   B(/\b12th\b|class (xii|12)\b|\bhsc\b|intermediate|higher secondary|pre university|\bpuc\b/, "twelfth"),
+  B(/industry/, "industry"),
+  P(/highest (education|qualification|degree)|which stream|education (and|&) (stream|specializ)/, (c) => {
+    const [deg, branch, college] = ["degree", "discipline", "college"].map((k) => answerOf(c.fields, k));
+    if (!deg) return null;
+    return `${deg}${branch ? ` in ${branch}` : ""}${college ? `, ${college}` : ""}`;
+  }),
+  B(/how soon|join us|joining (time|date|period)|when can you join/, "noticePeriod"),
   B(/sponsor/, "needsSponsorship"),
   B(/authori[sz]ed to work|legally (eligible|authori[sz]ed|able)|entitled to work|right to work|work permit|eligible to work/, "workAuthorization"),
   B(/relocat/, "willingToRelocate"),
@@ -514,11 +535,17 @@ export function pickOption(answer: string, options: string[]): string | null {
     // Several kinds of yes ("Yes - I am a citizen", "Yes - I have a visa"): a citizen's answer first.
     return matches.find((o) => /citizen/i.test(o)) ?? matches[0] ?? null;
   }
-  const starts = opts.find((o) => simple(o).startsWith(a) || a.startsWith(simple(o)));
+  // A number ("1", "30 days", "2 years"): the option whose range holds it ("1-3 Years", not "11+ Years").
+  const n = /^\d+(\.\d+)?( (years?|yrs?|days?|months?|lpa|weeks?))?$/.test(a) ? Number(a.match(/\d+(\.\d+)?/)![0]) : null;
+  if (n !== null) {
+    const inRange = pickRange(n, opts);
+    if (inRange) return inRange;
+  }
+  const starts = n === null ? opts.find((o) => simple(o).startsWith(a) || a.startsWith(simple(o))) : undefined;
   if (starts) return starts;
   const inside = opts.filter((o) => simple(o).includes(a) || a.includes(simple(o)));
   if (inside.length === 1) return inside[0];
-  // Numbers decide between "0-15 days", "30 days", "60 days": the option holding your number.
+  // Numbers in other words: the option holding your number.
   const num = a.match(/\d+(\.\d+)?/)?.[0];
   if (num) {
     const withNum = opts.filter((o) => new RegExp(`(^|[^0-9.])${num.replace(".", "\\.")}([^0-9.]|$)`).test(o));
@@ -534,6 +561,30 @@ export function pickOption(answer: string, options: string[]): string | null {
   return scored[0].s >= 0.75 ? scored[0].o : null;
 }
 
+/**
+ * The option whose range holds n: "0-1 years", "1 to 3", "11+", "less than 1", "Fresher", "30 days"…
+ * When n is where two ranges meet ("0-1" and "1-3" for 1), the one starting at n wins.
+ */
+function pickRange(n: number, opts: string[]): string | null {
+  const ranges = opts.map((o) => {
+    const t = o.toLowerCase().replace(/,/g, "");
+    let m: RegExpMatchArray | null;
+    if ((m = t.match(/(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)/))) return { o, lo: +m[1], hi: +m[2] };
+    if ((m = t.match(/(\d+(?:\.\d+)?)\s*\+|(?:more than|over|above|at least|greater than)\s*(\d+(?:\.\d+)?)/))) return { o, lo: +(m[1] ?? m[2]), hi: Infinity };
+    if ((m = t.match(/(?:less than|under|below|up ?to|within|<)\s*(\d+(?:\.\d+)?)/))) return { o, lo: 0, hi: +m[1], open: !/up ?to|within/.test(t) };
+    if (/fresher|no experience|immediate/.test(t)) return { o, lo: 0, hi: 0 };
+    if ((m = t.match(/^(\d+(?:\.\d+)?)(?:\s*\w+)?$/))) return { o, lo: +m[1], hi: +m[1] };
+    return null;
+  }).filter((r): r is { o: string; lo: number; hi: number; open?: boolean } => !!r);
+  const holds = ranges.filter((r) => n >= r.lo && (r.open ? n < r.hi : n <= r.hi));
+  if (!holds.length) return null;
+  // Where two ranges meet ("0-1" and "1-3" for 1 year), the one starting at n: you've done n years.
+  const starting = holds.find((r) => r.lo === n && r.hi > n);
+  if (starting) return starting.o;
+  // Otherwise the tightest ("Within 30 days" rather than "Within 60 days" for 30).
+  return holds.sort((x, y) => x.hi - x.lo - (y.hi - y.lo))[0].o;
+}
+
 /** Answers that forms word differently. Order matters: the more specific groups come first. */
 const SAME_THING = [
   /linked ?in/i,
@@ -544,6 +595,10 @@ const SAME_THING = [
   /career|company (web ?)?site|corporate (web ?)?site|employer (web ?)?site|\bwebsite\b|careers? page|job site/i,
   /job (board|portal|site)|online job/i,
   /campus|university|college/i,
+  /\bb\.?\s?(tech|e|sc|com|ca|ba)\b|bachelor|undergraduate|graduate degree/i,
+  /\bm\.?\s?(tech|e|sc|ca|ba|s)\b|master|post ?graduate|\bmba\b/i,
+  /\bit\b|information technology|software|technology|computer/i,
+  /bank|financial services|fintech|finance/i,
 ];
 
 /** Questions about this company in particular ("Why Stripe?"): kept for this form, not remembered by default. */
@@ -623,6 +678,8 @@ export function suggestFromResume(resume: string): Partial<AnswerFields> {
     const company = parts.find((p) => p !== title && !JOB_WORD.test(p) && /[A-Za-z]/.test(p));
     if (title) out.currentTitle = title;
     if (company) out.currentCompany = company;
+    const since = lines[nowAt].match(new RegExp(`(${MONTH})\\s*((?:19|20)\\d{2})\\s*[-–—to]+\\s*(present|current|now|till date|to date)`, "i"));
+    if (since) out.currentSince = `${since[1].slice(0, 3).replace(/^\w/, (ch) => ch.toUpperCase())} ${since[since.length - 2]}`;
   }
   return out;
 }
