@@ -14,6 +14,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import type { AutofillReport } from "../../shared/autofill";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 /** Raw file bytes. PGlite hands back a Uint8Array and postgres-js a Buffer; both become a Buffer. */
@@ -240,6 +241,51 @@ export const fetchRuns = pgTable("fetch_runs", {
   error: text("error"),
 });
 
+// ---------- Autofill (the laptop helper) ----------
+
+/**
+ * Laptops linked to an account, for the autofill helper. The helper sends a random token;
+ * only its SHA-256 is kept, like a session, so a leaked database can't be used to act as you.
+ */
+export const helperDevices = pgTable(
+  "helper_devices",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    name: text("name").notNull().default(""),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    lastSeenAt: ts("last_seen_at"),
+  },
+  (t) => [uniqueIndex("helper_devices_token_idx").on(t.tokenHash), index("helper_devices_user_idx").on(t.userId)],
+);
+
+/** One "Autofill this job" request: queued on the site, filled in Chrome by the helper, submitted by you. */
+export const autofillRuns = pgTable(
+  "autofill_runs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    resumeId: text("resume_id").references(() => resumeVersions.id, { onDelete: "set null" }),
+    /** queued | filling | needs_you | answered | review | submitted | error | cancelled */
+    status: text("status").notNull().default("queued"),
+    applyUrl: text("apply_url").notNull(),
+    /** What the helper last reported: fields it filled, questions it couldn't answer. */
+    report: jsonb("report").$type<AutofillReport>().notNull().default(sql`'{}'::jsonb`),
+    /** Answers you gave on the site for this form only (question → answer). */
+    answers: jsonb("answers").$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+    message: text("message").notNull().default(""),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("autofill_runs_user_idx").on(t.userId, t.status), index("autofill_runs_job_idx").on(t.jobId)],
+);
+
 export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
 export type Application = typeof applications.$inferSelect;
@@ -248,3 +294,5 @@ export type ResumeVersion = typeof resumeVersions.$inferSelect;
 export type ResumeFile = typeof resumeFiles.$inferSelect;
 export type FetchRun = typeof fetchRuns.$inferSelect;
 export type User = typeof users.$inferSelect;
+export type HelperDevice = typeof helperDevices.$inferSelect;
+export type AutofillRun = typeof autofillRuns.$inferSelect;

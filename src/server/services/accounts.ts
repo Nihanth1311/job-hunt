@@ -6,6 +6,7 @@ import { getDb, schema } from "../db";
 import type { User } from "../db/schema";
 import { fillFromPool } from "../fetching/fetcher";
 import { getProfile, getSecrets, saveProfile, setSecret } from "./settings";
+import { forgetHelperUser } from "./autofill";
 
 /** Right after someone signs in: fill gaps in their profile from Google and give them jobs from the shared pool. */
 export async function onFirstSignIn(user: User): Promise<void> {
@@ -96,6 +97,8 @@ export async function removePerson(email: string, deleteData: boolean): Promise<
   const [user] = await db.select().from(schema.users).where(eq(schema.users.email, e));
   if (!user || user.role === "admin") return;
   await db.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
+  await db.delete(schema.helperDevices).where(eq(schema.helperDevices.userId, user.id)); // their laptop helper too
+  forgetHelperUser(user.id);
   if (!deleteData) return;
   // Tracker entries cascade to their events; resumes and jobs go explicitly.
   await db.delete(schema.resumeVersions).where(eq(schema.resumeVersions.userId, user.id));

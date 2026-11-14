@@ -57,6 +57,13 @@
       "when": 1792074771096,
       "tag": "0007_resume_files",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794647371285,
+      "tag": "0008_autofill",
+      "breakpoints": true
     }
   ]
 }

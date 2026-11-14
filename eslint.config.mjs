@@ -35,6 +35,11 @@ const eslintConfig = defineConfig([
     files: ["src/server/**"],
     rules: restrict([{ group: ["@/client/**", "**/client/**", "@/app/**"], message: "Backend code can't import frontend code or pages." }]),
   },
+  {
+    // The laptop helper runs outside the site: it may share pure logic, never the site's code.
+    files: ["helper/**"],
+    rules: restrict([{ group: ["@/server/**", "@/client/**", "@/app/**", "**/src/server/**", "**/src/client/**", "**/src/app/**"], message: "The helper talks to the site only through its /api/helper addresses; it may import src/shared." }], { allowTypeImports: false }),
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

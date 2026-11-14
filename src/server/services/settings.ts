@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { decrypt, encrypt } from "../auth/crypto";
 import { getDb, schema } from "../db";
 import { scheduleChanged } from "@/shared/core/schedule";
+import type { AnswerBank } from "@/shared/autofill";
 import { DEFAULT_PREFERENCES, DEFAULT_PROFILE, type Preferences, type Profile } from "@/shared/types";
 
 // Every person's profile, preferences and state live under their user id.
@@ -42,6 +43,14 @@ export async function savePreferences(userId: string, p: Preferences): Promise<v
   await setValue(userId, "preferences", p);
   scheduleChanged(); // the fetch period may have changed
 }
+
+/** Your answers to the questions application forms ask (Profile → Application answers). */
+export async function getAnswerBank(userId: string): Promise<AnswerBank> {
+  const saved = (await getValue<Partial<AnswerBank>>(userId, "answers")) ?? {};
+  return { fields: { ...saved.fields }, learned: { ...saved.learned }, labels: { ...saved.labels } };
+}
+
+export const saveAnswerBank = (userId: string, bank: AnswerBank) => setValue(userId, "answers", bank);
 
 /** Small bits of a person's state, e.g. when their morning digest was last sent. */
 export const getState = <T>(userId: string, key: string) => getValue<T>(userId, `state:${key}`);

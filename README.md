@@ -4,6 +4,7 @@ A private, single-owner job search website. It finds fresh jobs in India, matche
 
 - **Jobs:** new roles from the last 24 hours, 2 days, 7 days or 30 days, grouped into **Full Stack · Frontend · Backend · DevOps · SDE**. Each job is filtered by your salary floor (default ₹10 LPA) and your experience, then scored against your skills.
 - **Resume & Claude:** open a job or paste any job description. The site picks the right resume (a DevOps job gets your DevOps resume), builds a ready-made prompt, and **opens Claude** so you can chat and refine. Paste the final version back to keep it with the job and print it as a PDF.
+- **Autofill:** press **Autofill** on a job and a helper on your laptop opens the real application form in Chrome and fills it from your profile and saved answers. Anything it doesn't know comes back to you on the site. You check the form and press Submit yourself.
 - **Tracker:** a drag-and-drop board (Saved → Applied → Assessment → Interview → Offer / Rejected), with notes, a timeline and automatic follow-up dates.
 - **Alerts:** an optional Telegram bot sends a 9 AM digest and instant alerts for strong matches.
 - **Yours only:** runs on your laptop or your own free server. Invite-only Google sign-in, no search-engine indexing, and one-click export of all your data.
@@ -73,6 +74,21 @@ Tip: in Claude, create a **Project** called “Job Hunt”, add your resume as p
 
 The prompts tell Claude to use **only** what's in your resume and to ask before adding any skill. Interviewers will ask about everything on your resume.
 
+## Autofill (the laptop helper)
+
+Fills Greenhouse, Lever and Ashby application forms in Chrome, about 40 of the followed companies plus any job whose link is on those sites. It needs Google Chrome on your laptop.
+
+1. **Profile → Application answers:** fill in the questions forms always ask (notice period, CTC, work authorisation, college…). Your name, email, phone, city and links come from *About you*.
+2. **Settings → Laptop helper → Link a laptop**, then run the command it shows once, in this folder:
+   ```bash
+   npm run helper -- connect https://<your-site> jhh_…
+   ```
+3. Whenever you want to apply: `npm run helper` in this folder, then press **Autofill** on a job (also from your phone; it waits for the helper). A Chrome window opens and fills the form.
+4. Questions it can't answer show on the job page. Answer them there and they're typed in; tick *Remember* to reuse an answer on every future form.
+5. Check the form in Chrome and press **Submit** yourself. The job moves to **Applied** in your tracker.
+
+The helper never presses Submit, never ticks agreements or consent boxes, and never types passwords. It stops by itself after 30 minutes with nothing to do (`HELPER_IDLE_MINUTES` changes that). Its files live in `~/.jobhunt-helper/`, including its own Chrome profile, separate from your everyday Chrome.
+
 ## Put it online
 
 See **[docs/DEPLOY.md](docs/DEPLOY.md)**. It covers a free Oracle Cloud server, a free domain, automatic HTTPS and daily backups. Before the site is reachable from the internet, set up Google sign-in (above), `SESSION_SECRET` and `APP_URL`.
@@ -100,6 +116,7 @@ src/
     core/                 Scoring, experience, skills, role types, prompts, LaTeX, schedule maths
     types.ts              Shared types, including what the server hands to the screens
   proxy.ts              First gate on every request (signed in?)
+helper/                 The autofill helper that runs on your laptop (npm run helper); talks to the site only via /api/helper
   instrumentation.ts    Starts the scheduler when the server starts
 drizzle/                Database migrations (applied automatically on start)
 ```

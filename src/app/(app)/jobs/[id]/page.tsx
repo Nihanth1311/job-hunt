@@ -3,6 +3,7 @@ import Link from "next/link";
 import { JobsLink } from "@/client/components/layout/jobs-memory";
 import { notFound, redirect } from "next/navigation";
 import { adoptSharedJob } from "@/server/services/jobs";
+import { AutofillCard } from "@/client/components/jobs/autofill-card";
 import { FitLine } from "@/client/components/jobs/fit-line";
 import { JobAbout } from "@/client/components/jobs/job-about";
 import { JobActions } from "@/client/components/jobs/job-actions";
@@ -19,6 +20,9 @@ import { formatDate, isOverdue, timeAgo } from "@/shared/format";
 import { getBaseResumes, jobPageData } from "@/server/services/queries";
 import { requireUser } from "@/server/auth";
 import { getPreferences, getProfile, getSecrets, getState } from "@/server/services/settings";
+import { helperOnline, latestRun } from "@/server/services/autofill";
+import { resumeIdsWithPdf } from "@/server/services/resume-files";
+import { applyTarget, PLATFORM_LABEL } from "@/shared/autofill";
 import { STATUS_LABEL, TRACK_LABEL, TRACK_TITLE, type AppStatus, type Preferences, type Track } from "@/shared/types";
 
 export async function generateMetadata({ params }: PageProps<"/jobs/[id]">): Promise<Metadata> {
@@ -30,12 +34,14 @@ export async function generateMetadata({ params }: PageProps<"/jobs/[id]">): Pro
 export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const { id } = await params;
   const { id: uid } = await requireUser();
-  const [data, profile, prefs, bases, secrets] = await Promise.all([
+  const [data, profile, prefs, bases, secrets, withPdf, lastRun] = await Promise.all([
     jobPageData(uid, id),
     getProfile(uid),
     getPreferences(uid),
     getBaseResumes(uid),
     getSecrets(uid),
+    resumeIdsWithPdf(uid),
+    latestRun(uid, id),
   ]);
   if (!data) {
     // A link someone shared from their feed: open (or add) the same job in this person's feed.
@@ -54,6 +60,16 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const postingUrl = job.companyUrl ?? job.url ?? null;
   const googleQuota = secrets.jsearchKey ? ((await getState<{ remaining: number }>(uid, "jsearchQuota"))?.remaining ?? null) : undefined;
   const track = (job.track in TRACK_TITLE ? job.track : "fullstack") as Track;
+  // Autofill: resumes that are (or can become) a PDF. One made for this job first, then the one for its role.
+  const target = applyTarget(job);
+  const hasPdf = (r: { id: string; content: string }) => withPdf.has(r.id) || isLatex(r.content);
+  const autofillResumes = [
+    ...versions.filter(hasPdf).map((v) => ({ id: v.id, label: `${v.label || "Made for this job"} (this job)` })),
+    ...Object.values(bases)
+      .filter(hasPdf)
+      .sort((a, b) => (a.track === track ? -1 : b.track === track ? 1 : 0))
+      .map((b) => ({ id: b.id, label: `${TRACK_LABEL[b.track as Track] ?? b.track} base resume` })),
+  ];
   const followUpDue = application?.followUpAt && !["offer", "rejected", "saved"].includes(application.status) ? application.followUpAt : null;
 
   return (
@@ -167,6 +183,17 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
         <aside className="max-lg:contents lg:space-y-6">
           <div className="max-lg:order-1">
             <MatchCard job={job} prefs={prefs} track={track} hasSkills={Object.values(profile.skills).some((s) => s.length > 0)} />
+          </div>
+          <div className="max-lg:order-1">
+            <AutofillCard
+              jobId={job.id}
+              company={job.company}
+              platform={target ? PLATFORM_LABEL[target.platform] : null}
+              resumes={autofillResumes}
+              suggested={lastRun?.resumeId ?? autofillResumes[0]?.id ?? null}
+              initialRun={lastRun}
+              initialOnline={helperOnline(uid)}
+            />
           </div>
 
           <div className="max-lg:order-4">

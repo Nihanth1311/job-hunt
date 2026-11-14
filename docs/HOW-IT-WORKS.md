@@ -110,6 +110,7 @@ job-hunt-hq/
 │  │
 │  ├─ proxy.ts                ← first gate on every request (signed in?)  ┐ Next.js wants these
 │  └─ instrumentation.ts      ← starts the scheduler with the server      ┘ two at the top of src/
+├─ helper/                    ← the autofill helper that runs on your laptop (npm run helper)
 ├─ drizzle/                   ← database migrations (numbered SQL files)
 ├─ public/sw.js               ← the service worker (notifications)
 ├─ .github/workflows/         ← the hourly GitHub alarm clock
@@ -322,6 +323,50 @@ entry below. **Settings → Recent fetches** shows when each alarm clock last ar
 
 ---
 
+## 9½. Autofill: the laptop helper
+
+A website can't control your browser, so filling forms needs a program on your laptop. It lives in
+[helper/](../helper/) and runs with `npm run helper`.
+
+```
+ Job page                     Your site (Render)                 Your laptop
+ ────────                     ──────────────────                 ───────────
+ Autofill + resume  ───────▶  autofill_runs: queued
+                              "anything for me?" ◀── every 3-8 s ── helper
+                              hands over the job, your answers ──▶ opens Chrome, fills the form
+ "Needs your answer"  ◀─────  report: filled / questions ◀──────── (never presses Submit)
+ you answer  ───────────────▶ status: answered ──────────────────▶ types them in
+                              status: submitted ◀───────────────── sees "Thanks for applying"
+ Tracker: Applied
+```
+
+- **Linking a laptop** ([helper-card.tsx](../src/client/components/settings/helper-card.tsx)):
+  Settings makes a random token, shown once; the database keeps only its SHA-256, like a session.
+  The token only opens the `/api/helper/` addresses ([api/helper](../src/app/api/helper/)), and
+  unlinking or removing the person stops it at once.
+- **The answers** ([shared/autofill.ts](../src/shared/autofill.ts)): your contact details, the
+  answers bank (Profile → Application answers) and answers you taught it. A form's question is
+  reduced to a plain form ("7. Have you worked at Stripe before? *" → "have you worked at {company}
+  before"), so an answer given once is found again on another company's form. Long questions are
+  matched on their last sentence, the actual question.
+- **Reading a form** ([helper/scan.ts](../helper/scan.ts)): one script finds every question on
+  the page, its label, whether it's required and its choices. The three sites build forms
+  differently (Greenhouse uses custom dropdowns, Lever wraps fields in labels, Ashby has Yes/No
+  buttons), and the script handles each.
+- **Filling** ([helper/fill.ts](../helper/fill.ts)): the resume first (Lever reads it and fills
+  name and email itself), then each question, then a second look for questions that appeared
+  after an answer. A field that already holds something is never overwritten. An answer that
+  doesn't match any of a dropdown's choices is asked, not guessed.
+- **Never answered for you:** agreements and consent ("I acknowledge…"), anything it isn't
+  sure of, and Submit.
+
+> **Concept: polling, made cheap.** The helper asks the site for work every few seconds. If each
+> question read the database, Neon could never pause (see §8). So the site remembers in memory
+> whether anything was queued or answered for you ([services/autofill.ts](../src/server/services/autofill.ts)),
+> and most questions are answered in about 2 ms without touching the database. The job page does
+> the same: each run has a version number, and "anything new?" is answered from memory when it
+> hasn't changed. The helper also stops after 30 idle minutes.
+
 ## 10. Hosting and what it costs
 
 | Service | Free plan | Our usage |
@@ -338,7 +383,7 @@ one database** (Neon): `DATABASE_URL` in `.env` points there, with `SCHEDULER=of
 your laptop doesn't run fetches too.
 
 > **Concept: migrations.** The database's shape (tables, columns) changes over time. Each change
-> is a numbered SQL file in [drizzle/](../drizzle/) (`0000_init.sql` … `0007_resume_files.sql`).
+> is a numbered SQL file in [drizzle/](../drizzle/) (`0000_init.sql` … `0008_autofill.sql`).
 > On start, the app applies any it hasn't run yet, so the live database always matches the code.
 
 ---
@@ -346,6 +391,26 @@ your laptop doesn't run fetches too.
 ## 11. Learning journal
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
+
+### Autofill: a helper on your laptop fills the forms
+**What:** press Autofill on a job; a helper on your laptop opens the Greenhouse, Lever or Ashby
+form in Chrome, fills it from your profile and answers bank, uploads the chosen resume, and sends
+back the questions it can't answer. You answer on the site (from your phone too), it types them
+in, and you submit. The tracker updates itself. See [§9½](#9-autofill-the-laptop-helper).
+**Why a laptop program:** a website can't control your browser. Running Chrome on Render's free
+server isn't possible either (not enough memory), and job sites trust home connections more.
+**Design choices:** the helper calls the site, never the other way round, so it works behind any
+home router and the site stays the one place your data lives. It never clicks Submit: a wrong
+answer goes to a real recruiter under your name, so the last look is yours.
+**Tested** against live GitLab (Greenhouse), Meesho (Lever) and Sarvam (Ashby) forms with test
+details and no submitting: 11, 13 and 5 fields filled; the questions sent back were the right
+ones (company-specific, or things you hadn't saved). Answering on the site filled them in;
+"I submitted it" moved the job to Applied; Cancel closed the tab. **Bug found:** "I don't wish to
+answer" wasn't seen as a decline option, because the rule expected "dont" without the apostrophe.
+**Lessons:** look at the real pages before writing the code that reads them: each site built its
+dropdowns differently, and one hid a list of 240 countries that a careless search would have read
+as the answer choices. And when something checks every few seconds, make the common answer
+("nothing new") cost nothing.
 
 ### Tailoring: every role gets job-aligned bullets
 **Problem:** the tailoring prompt said experience bullets may only describe work already on the

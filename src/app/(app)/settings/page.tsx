@@ -1,19 +1,22 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { ApiKeysCard } from "@/client/components/settings/api-keys-card";
 import { CompaniesCard } from "@/client/components/settings/companies-card";
+import { HelperCard } from "@/client/components/settings/helper-card";
 import { FetchButton } from "@/client/components/jobs/fetch-button";
 import { PushCard } from "@/client/components/settings/push-card";
 import { RestoreBackup } from "@/client/components/settings/restore-backup";
 import { SettingsForm } from "@/client/components/settings/settings-form";
 import { Badge, buttonClass, Card, CardTitle, cx, Icon, PageHeader } from "@/client/components/ui";
 import { requireUser } from "@/server/auth";
-import { formatDateTime, timeAgo } from "@/shared/format";
+import { formatDate, formatDateTime, timeAgo } from "@/shared/format";
 import { getPushLog, getPushMode, getPushSubs, vapidPublicKey } from "@/server/notify/push";
 import { telegramConfigured } from "@/server/notify/telegram";
 import { careerSiteCounts, recentFetchRuns } from "@/server/services/queries";
 import { nextSlot, slotTimesLabel } from "@/shared/core/schedule";
 import { getWakeups } from "@/server/fetching/scheduler";
 import { getPreferences, getSecrets, getState, maskSecret, telegramEnabled } from "@/server/services/settings";
+import { helperOnline, listHelperDevices } from "@/server/services/autofill";
 import { SOURCES } from "@/server/fetching/sources";
 import { getCompanyHealth } from "@/server/fetching/sources/companies";
 import { COMPANIES, SECTORS } from "@/server/fetching/sources/companies/registry";
@@ -48,7 +51,7 @@ function Status({ ok, children }: { ok: boolean; children: React.ReactNode }) {
 export default async function SettingsPage() {
   const user = await requireUser();
   const uid = user.id;
-  const [prefs, runs, jsearchQuota, health, inFeed, secrets, pushKey, pushMode, pushSubs, lastAuto, wakeups, pushLog, telegramAllowed] = await Promise.all([
+  const [prefs, runs, jsearchQuota, health, inFeed, secrets, pushKey, pushMode, pushSubs, lastAuto, wakeups, pushLog, telegramAllowed, devices] = await Promise.all([
     getPreferences(uid),
     recentFetchRuns(uid, 12),
     getState<{ remaining: number; limit: number | null; at: string }>(uid, "jsearchQuota"),
@@ -62,7 +65,11 @@ export default async function SettingsPage() {
     getWakeups(),
     getPushLog(uid),
     telegramEnabled(),
+    listHelperDevices(uid),
   ]);
+  // The address the laptop helper talks to: this site as you opened it.
+  const h = await headers();
+  const siteUrl = process.env.APP_URL?.replace(/\/+$/, "") || `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host") ?? "localhost:3000"}`;
   const nextAuto = new Date(nextSlot(prefs.fetchIntervalHours));
   const companyRows = COMPANIES.map((co) => ({
     id: co.id,
@@ -92,6 +99,14 @@ export default async function SettingsPage() {
       <div className="mb-5">
         <PushCard publicKey={pushKey} mode={pushMode} devices={pushSubs.map((s) => s.device)} intervalHours={prefs.fetchIntervalHours}
           log={pushLog.map((e) => ({ ...e, when: formatDateTime(e.at) }))}
+        />
+      </div>
+
+      <div className="mb-5">
+        <HelperCard
+          devices={devices.map((d) => ({ id: d.id, name: d.name, added: formatDate(d.createdAt), seen: d.lastSeenAt ? timeAgo(d.lastSeenAt) : null }))}
+          online={helperOnline(uid)}
+          siteUrl={siteUrl}
         />
       </div>
 
