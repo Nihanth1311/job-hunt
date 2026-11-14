@@ -65,6 +65,7 @@ export function TrackerBoard({ applications }: { applications: Application[] }) 
               <AppCardBody app={a} onMove={(st) => move(a.id, st)} />
             </article>
           ))}
+          {stage === "rejected" && <p className="text-xs text-muted">Rejected applications are deleted for good a day after moving here.</p>}
           {inStage.length === 0 && (
             <p className="rounded-xl border border-dashed border-line-strong px-4 py-10 text-center text-sm text-muted">
               Nothing in {STATUS_LABEL[stage]} yet.
@@ -101,6 +102,7 @@ export function TrackerBoard({ applications }: { applications: Application[] }) 
                 <h2 className="text-sm font-medium">{STATUS_LABEL[status]}</h2>
                 <span className="ml-auto rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted">{items.length}</span>
               </header>
+              {status === "rejected" && <p className="-mt-1.5 mb-2.5 px-1.5 text-[11px] text-muted">Deleted for good a day after moving here.</p>}
               <div className="flex flex-col gap-2">
                 {items.map((a) => (
                   <article

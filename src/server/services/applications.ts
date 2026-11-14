@@ -1,12 +1,34 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, lt } from "drizzle-orm";
 import { getDb, schema } from "../db";
 import type { Application, Job } from "../db/schema";
 import { STATUS_LABEL, type AppStatus } from "@/shared/types";
 
 const FOLLOW_UP_DAYS = 7;
 const inDays = (d: number) => new Date(Date.now() + d * 86_400_000);
+
+/** How long a rejected application stays in the tracker before it's deleted for good. */
+export const REJECTED_KEEP_MS = 24 * 3_600_000;
+
+/**
+ * Rejected applications a day after they were moved there (or last touched): deleted for good,
+ * with their timeline and their job, so nothing of them stays in the database. Resumes you
+ * tailored for them stay in your resume library. Runs with the scheduler's cleanup.
+ */
+export async function cleanupRejected(): Promise<number> {
+  const db = await getDb();
+  const old = await db
+    .select({ id: schema.applications.id, jobId: schema.applications.jobId })
+    .from(schema.applications)
+    .where(and(eq(schema.applications.status, "rejected"), lt(schema.applications.updatedAt, new Date(Date.now() - REJECTED_KEEP_MS))));
+  if (!old.length) return 0;
+  // Timeline entries go with the application (ON DELETE CASCADE); autofill runs go with the job.
+  await db.delete(schema.applications).where(inArray(schema.applications.id, old.map((a) => a.id)));
+  const jobIds = old.map((a) => a.jobId).filter((id): id is string => !!id);
+  if (jobIds.length) await db.delete(schema.jobs).where(inArray(schema.jobs.id, jobIds));
+  return old.length;
+}
 
 /** Keep the job feed in sync with what you're doing in the tracker. */
 function jobStatusFor(status: AppStatus): "saved" | "applied" {
