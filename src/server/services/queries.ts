@@ -365,7 +365,7 @@ export async function listTailoredResumes(uid: string) {
  * text resumes become PDFs the first time they're needed. Contents stay in the database: only
  * the facts the list needs travel.
  */
-export async function pdfResumes(uid: string) {
+export async function allResumes(uid: string) {
   const db = await getDb();
   const rows = await db
     .select({

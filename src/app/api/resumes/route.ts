@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/server/auth";
 import { getDb, schema } from "@/server/db";
 import { looksLikePdf, MAX_PDF_BYTES, pdfText, saveResumeFile } from "@/server/services/resume-files";
-import { TRACKS, type Track } from "@/shared/types";
+import { resumeName, TRACKS, type Track } from "@/shared/types";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
   const track = String(form?.get("track") ?? "");
   if (!TRACKS.includes(track as Track)) return Response.json({ error: "Pick a role type." }, { status: 400 });
-  const label = String(form?.get("label") ?? "").trim() || "Base";
+  const label = resumeName(track, null, String(form?.get("label") ?? "").trim() || "Base");
 
   let text = "";
   try {

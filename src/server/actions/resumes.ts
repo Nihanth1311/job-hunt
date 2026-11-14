@@ -12,7 +12,7 @@ import { insertJobs, toNewJob } from "../services/jobs";
 import { getJob } from "../services/queries";
 import { compileLatex, saveResumeFile } from "../services/resume-files";
 import { getPreferences, getProfile } from "../services/settings";
-import { TRACKS, type Track } from "@/shared/types";
+import { resumeName, TRACKS, type Track } from "@/shared/types";
 
 const refreshAll = () => revalidatePath("/", "layout");
 const asTrack = (s: unknown): Track => (TRACKS.includes(s as Track) ? (s as Track) : "fullstack");
@@ -34,7 +34,7 @@ export async function saveBaseResume(
 
   const db = await getDb();
   const id = randomUUID();
-  await db.insert(schema.resumeVersions).values({ id, userId: uid, track: asTrack(track), label: "Base", content: text, isBase: true });
+  await db.insert(schema.resumeVersions).values({ id, userId: uid, track: asTrack(track), label: resumeName(asTrack(track)), content: text, isBase: true });
   if (compiled && "pdf" in compiled) await saveResumeFile(uid, id, { source: "latex", fileName: "Resume.pdf", pdf: compiled.pdf });
   refreshAll();
   return { id };
@@ -51,7 +51,8 @@ export async function saveResumeVersion(input: {
   if (!input.content.trim()) return null;
   const db = await getDb();
   // Only link to this person's own job and tracker entry.
-  const jobId = input.jobId && (await getJob(uid, input.jobId)) ? input.jobId : null;
+  const job = input.jobId ? await getJob(uid, input.jobId) : null;
+  const jobId = job ? job.id : null;
   let applicationId = input.applicationId && (await ownApplication(uid, input.applicationId)) ? input.applicationId : null;
   if (!applicationId && jobId) {
     const [app] = await db
@@ -65,7 +66,7 @@ export async function saveResumeVersion(input: {
     id,
     userId: uid,
     track: asTrack(input.track),
-    label: input.label.trim() || "Tailored",
+    label: resumeName(asTrack(input.track), job, input.label.trim() || "Tailored"),
     content: input.content.trim(),
     jobId,
     applicationId,

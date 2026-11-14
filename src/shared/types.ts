@@ -20,6 +20,27 @@ export const TRACK_TITLE: Record<Track, string> = {
   security: "Cybersecurity Engineer",
 };
 
+/** Short names for resume titles: "FE · Stripe · Frontend Engineer". */
+export const TRACK_SHORT: Record<Track, string> = {
+  frontend: "FE",
+  backend: "BE",
+  fullstack: "FS",
+  devops: "DevOps",
+  data: "DS",
+  security: "Sec",
+};
+
+/**
+ * A resume's name: role type, then company and job title when it was made for a job
+ * ("FE · Stripe · Frontend Engineer"), else what it is ("BE · Base"). The company and title are
+ * written into the name, so it still says what it was for after the job itself is deleted.
+ */
+export function resumeName(track: string, job?: { company: string; title: string } | null, otherwise = "Base"): string {
+  const short = TRACK_SHORT[track as Track] ?? track;
+  if (job?.company) return [short, job.company.trim(), job.title.trim().slice(0, 70)].filter(Boolean).join(" · ");
+  return `${short} · ${otherwise.trim() || "Base"}`;
+}
+
 /** How a saved resume becomes a PDF: the file you uploaded, LaTeX we compile, or plain text you print. */
 export type ResumeKind = "upload" | "latex" | "text";
 

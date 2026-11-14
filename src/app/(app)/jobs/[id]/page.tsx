@@ -17,7 +17,7 @@ import { scoreResume } from "@/shared/core/resume-score";
 import { siteLabel, SOURCE_LABEL, sourceLabel } from "@/shared/core/links";
 import type { Job } from "@/server/db/schema";
 import { formatDate, isOverdue, timeAgo } from "@/shared/format";
-import { getBaseResumes, jobPageData, pdfResumes } from "@/server/services/queries";
+import { allResumes, getBaseResumes, jobPageData } from "@/server/services/queries";
 import { requireUser } from "@/server/auth";
 import { getPreferences, getProfile, getSecrets, getState } from "@/server/services/settings";
 import { helperOnline, latestRun } from "@/server/services/autofill";
@@ -39,7 +39,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
     getPreferences(uid),
     getBaseResumes(uid),
     getSecrets(uid),
-    pdfResumes(uid),
+    allResumes(uid),
     latestRun(uid, id),
   ]);
   if (!data) {
@@ -66,14 +66,14 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const day = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   const text = (r: { isLatex: boolean; hasFile: boolean }) => (r.isLatex || r.hasFile ? "" : " · text, made into a PDF");
   const autofillResumes = [
-    ...usable.filter((r) => r.jobId === job.id).map((r) => ({ group: "Made for this job", id: r.id, label: `${r.label || "Tailored"} · ${day(r.createdAt)}${text(r)}` })),
+    ...usable.filter((r) => r.jobId === job.id).map((r) => ({ group: "Made for this job", id: r.id, label: `${r.label} · ${day(r.createdAt)}${text(r)}` })),
     ...usable
       .filter((r) => r.isBase)
       .sort((a, b) => Number(b.track === track) - Number(a.track === track))
-      .map((r) => ({ group: "Base resumes", id: r.id, label: `${trackName(r.track)}${r.label && r.label !== "Base" ? ` · ${r.label}` : ""} · ${day(r.createdAt)}${text(r)}` })),
+      .map((r) => ({ group: "Base resumes", id: r.id, label: `${r.label || trackName(r.track)} · ${day(r.createdAt)}${text(r)}` })),
     ...usable
       .filter((r) => !r.isBase && r.jobId !== job.id)
-      .map((r) => ({ group: "Made for other jobs", id: r.id, label: `${r.label || trackName(r.track)}${r.company ? ` · ${r.company}` : ""} · ${day(r.createdAt)}${text(r)}` })),
+      .map((r) => ({ group: "Made for other jobs", id: r.id, label: `${r.label || trackName(r.track)} · ${day(r.createdAt)}${text(r)}` })),
   ];
   const followUpDue = application?.followUpAt && !["offer", "rejected", "saved"].includes(application.status) ? application.followUpAt : null;
 

@@ -64,6 +64,13 @@
       "when": 1794647371285,
       "tag": "0008_autofill",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794656722927,
+      "tag": "0009_rename_resumes",
+      "breakpoints": true
     }
   ]
 }

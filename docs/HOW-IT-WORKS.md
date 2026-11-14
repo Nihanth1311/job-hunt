@@ -400,6 +400,17 @@ your laptop doesn't run fetches too.
 
 Newest first. Each entry: what changed, the problem behind it, and the lesson.
 
+### Resume names, every resume in one list, rejected jobs cleared
+**What:** resumes are named "role type · company · job title" ("FE · Stripe · Frontend Engineer",
+"BE · Base"); a one-off migration ([0009_rename_resumes.sql](../drizzle/0009_rename_resumes.sql))
+renamed the existing ones and `resumeName()` names new ones. The Resumes page lists every resume,
+older base versions included, with Preview and Delete. Rejected applications are deleted for good
+a day after moving to Rejected, with their timeline and job; their resumes stay.
+**Design choice:** the company and title are written into the resume's name rather than looked
+up from its job, because the job can be deleted (rejected cleanup, the 30-day cleanup) while the
+resume stays.
+**Lesson:** when one piece of data outlives another, copy what it needs to stay meaningful.
+
 ### Autofill answers the usual questions too
 **Problem:** on a real Barclays application, autofill left date of birth, "How did you hear about
 us?" and simple yes/no questions ("worked at Barclays before?", "relatives here?") for you.
