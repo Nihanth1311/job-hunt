@@ -6,7 +6,7 @@ import { answerAutofill, autofillUpdate, cancelAutofill, confirmSubmitted, start
 import { ACTIVE_RUN, isCompanySpecific, PLATFORM_LABEL, type AutofillPlatform, type AutofillQuestion, type AutofillRunView } from "@/shared/autofill";
 import { Button, Callout, Card, CardTitle, Icon, Spinner, buttonClass } from "../ui";
 
-type ResumeOption = { id: string; label: string };
+type ResumeOption = { id: string; label: string; group: string };
 
 /** How often the page asks for news while an autofill is going: quickly at first, then less. */
 const FAST_MS = 3000;
@@ -132,12 +132,24 @@ export function AutofillCard({
                 Resume to upload
               </label>
               <select id="af-resume" className="field" value={resumeId} onChange={(e) => setResumeId(e.target.value)}>
-                {resumes.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label}
-                  </option>
+                {[...new Set(resumes.map((r) => r.group))].map((g) => (
+                  <optgroup key={g} label={g}>
+                    {resumes
+                      .filter((r) => r.group === g)
+                      .map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.label}
+                        </option>
+                      ))}
+                  </optgroup>
                 ))}
               </select>
+              <p className="mt-1.5 text-xs text-muted">
+                {resumes.length} resume{resumes.length === 1 ? "" : "s"} with a PDF.{" "}
+                <Link href="/resumes" className="text-accent hover:underline">
+                  Add or manage resumes
+                </Link>
+              </p>
               <Button variant="primary" className="mt-3 w-full" disabled={pending || !resumeId} onClick={begin}>
                 {pending ? <Spinner /> : <Icon name="sparkles" className="size-3.5" />}
                 {run ? "Autofill again" : "Autofill"}

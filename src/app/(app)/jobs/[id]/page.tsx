@@ -17,11 +17,10 @@ import { scoreResume } from "@/shared/core/resume-score";
 import { siteLabel, SOURCE_LABEL, sourceLabel } from "@/shared/core/links";
 import type { Job } from "@/server/db/schema";
 import { formatDate, isOverdue, timeAgo } from "@/shared/format";
-import { getBaseResumes, jobPageData } from "@/server/services/queries";
+import { getBaseResumes, jobPageData, pdfResumes } from "@/server/services/queries";
 import { requireUser } from "@/server/auth";
 import { getPreferences, getProfile, getSecrets, getState } from "@/server/services/settings";
 import { helperOnline, latestRun } from "@/server/services/autofill";
-import { resumeIdsWithPdf } from "@/server/services/resume-files";
 import { applyTarget } from "@/shared/autofill";
 import { STATUS_LABEL, TRACK_LABEL, TRACK_TITLE, type AppStatus, type Preferences, type Track } from "@/shared/types";
 
@@ -34,13 +33,13 @@ export async function generateMetadata({ params }: PageProps<"/jobs/[id]">): Pro
 export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const { id } = await params;
   const { id: uid } = await requireUser();
-  const [data, profile, prefs, bases, secrets, withPdf, lastRun] = await Promise.all([
+  const [data, profile, prefs, bases, secrets, usable, lastRun] = await Promise.all([
     jobPageData(uid, id),
     getProfile(uid),
     getPreferences(uid),
     getBaseResumes(uid),
     getSecrets(uid),
-    resumeIdsWithPdf(uid),
+    pdfResumes(uid),
     latestRun(uid, id),
   ]);
   if (!data) {
@@ -60,15 +59,20 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const postingUrl = job.companyUrl ?? job.url ?? null;
   const googleQuota = secrets.jsearchKey ? ((await getState<{ remaining: number }>(uid, "jsearchQuota"))?.remaining ?? null) : undefined;
   const track = (job.track in TRACK_TITLE ? job.track : "fullstack") as Track;
-  // Autofill: resumes that are (or can become) a PDF. One made for this job first, then the one for its role.
+  // Autofill: every resume that is (or can become) a PDF. Made for this job first, then base
+  // resumes (this job's role type first, newest first), then the ones made for other jobs.
   const target = applyTarget(job);
-  const hasPdf = (r: { id: string; content: string }) => withPdf.has(r.id) || isLatex(r.content);
+  const trackName = (t: string) => TRACK_LABEL[t as Track] ?? t;
+  const day = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   const autofillResumes = [
-    ...versions.filter(hasPdf).map((v) => ({ id: v.id, label: `${v.label || "Made for this job"} (this job)` })),
-    ...Object.values(bases)
-      .filter(hasPdf)
-      .sort((a, b) => (a.track === track ? -1 : b.track === track ? 1 : 0))
-      .map((b) => ({ id: b.id, label: `${TRACK_LABEL[b.track as Track] ?? b.track} base resume` })),
+    ...usable.filter((r) => r.jobId === job.id).map((r) => ({ group: "Made for this job", id: r.id, label: `${r.label || "Tailored"} · ${day(r.createdAt)}` })),
+    ...usable
+      .filter((r) => r.isBase)
+      .sort((a, b) => Number(b.track === track) - Number(a.track === track))
+      .map((r) => ({ group: "Base resumes", id: r.id, label: `${trackName(r.track)}${r.label && r.label !== "Base" ? ` · ${r.label}` : ""} · ${day(r.createdAt)}` })),
+    ...usable
+      .filter((r) => !r.isBase && r.jobId !== job.id)
+      .map((r) => ({ group: "Made for other jobs", id: r.id, label: `${r.label || trackName(r.track)}${r.company ? ` · ${r.company}` : ""} · ${day(r.createdAt)}` })),
   ];
   const followUpDue = application?.followUpAt && !["offer", "rejected", "saved"].includes(application.status) ? application.followUpAt : null;
 

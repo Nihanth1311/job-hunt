@@ -360,6 +360,33 @@ export async function listTailoredResumes(uid: string) {
     .orderBy(desc(schema.resumeVersions.createdAt));
 }
 
+/**
+ * Every resume that can go on an application as a PDF: uploaded PDFs, and LaTeX (compiled when
+ * first needed). Plain-text resumes can't be uploaded, so they're left out. Contents stay in the
+ * database: only the facts the list needs travel.
+ */
+export async function pdfResumes(uid: string) {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      id: schema.resumeVersions.id,
+      label: schema.resumeVersions.label,
+      track: schema.resumeVersions.track,
+      isBase: schema.resumeVersions.isBase,
+      jobId: schema.resumeVersions.jobId,
+      createdAt: schema.resumeVersions.createdAt,
+      jobTitle: schema.jobs.title,
+      company: schema.jobs.company,
+      isLatex: sql<boolean>`(strpos(${schema.resumeVersions.content}, '\\documentclass') > 0)`,
+      hasFile: sql<boolean>`exists (select 1 from ${schema.resumeFiles} where ${schema.resumeFiles.resumeId} = ${schema.resumeVersions.id})`,
+    })
+    .from(schema.resumeVersions)
+    .leftJoin(schema.jobs, eq(schema.resumeVersions.jobId, schema.jobs.id))
+    .where(eq(schema.resumeVersions.userId, uid))
+    .orderBy(desc(schema.resumeVersions.createdAt));
+  return rows.filter((r) => r.isLatex || r.hasFile);
+}
+
 export async function getResume(uid: string, id: string) {
   const db = await getDb();
   const [r] = await db
