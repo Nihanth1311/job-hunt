@@ -92,7 +92,10 @@ export async function advance(flow: Flow): Promise<Outcome> {
     flow.index = s.index;
 
     if (s.gate) {
-      return out("waiting", "Sign in, or create your account, in the Chrome window. The helper never types passwords or codes; it carries on by itself once you're in.");
+      return out(
+        "waiting",
+        "Sign in, or create your account, in the Chrome window. The helper never types passwords or codes; it carries on by itself once you're in. If the site won't let you sign in there, stop the helper and run: npm run helper -- signin <the page's address>",
+      );
     }
 
     // My Experience with every section empty is still a page to fill: its Add buttons open entries.

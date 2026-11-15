@@ -464,6 +464,16 @@ Achievements always last; every link a clickable `\href`.
 **Lesson:** "one source of truth" is per question: the latest facts live in one place, the
 wording for a role in another.
 
+### Sites that won't let you sign in in the helper's Chrome
+**Problem:** some sign-in pages (Google and Microsoft accounts, some company sites such as
+Qualcomm's) refuse a browser that a program controls, so you couldn't sign in there at all.
+**Change:** `npm run helper -- signin <address>` opens *ordinary* Chrome on the helper's own
+profile; you sign in yourself and quit it, and the helper's Chrome then has that session. For the
+session to carry over, the helper's Chrome now keeps cookies in the Mac keychain like normal
+Chrome (Playwright's default is a fake keychain, which can't read them). The helper's Chrome is
+not disguised; the sign-in just happens in a browser nothing is controlling.
+**Lesson:** when a site refuses automation, hand that step to the person, not to a workaround.
+
 ### Resume names, every resume in one list, rejected jobs cleared
 **What:** resumes are named "role type · company · job title" ("FE · Stripe · Frontend Engineer",
 "BE · Base"); a one-off migration ([0009_rename_resumes.sql](../drizzle/0009_rename_resumes.sql))

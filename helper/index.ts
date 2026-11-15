@@ -3,10 +3,12 @@
 //
 //   npm run helper -- connect <site address> <token>   once, with the command from Settings → Laptop helper
 //   npm run helper                                      whenever you want to apply to jobs
+//   npm run helper -- signin <page address>             sign in to a site that refuses the helper's Chrome
 //
 // It asks the site for work every few seconds, and stops by itself after a while with nothing to
 // do (so it never keeps your free database awake for nothing).
 
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium, type BrowserContext, type Page } from "playwright-core";
@@ -80,6 +82,9 @@ class Helper {
       headless: Boolean(process.env.HELPER_HEADLESS), // for testing only: normally you watch it fill
       viewport: null,
       args: ["--start-maximized"],
+      // Keep sign-ins in your Mac's keychain like normal Chrome, so a session you start with
+      // "npm run helper -- signin" (ordinary Chrome, same profile) carries over here.
+      ignoreDefaultArgs: ["--use-mock-keychain", "--password-store=basic"],
     });
     ctx.on("close", () => {
       this.ctx = null;
@@ -257,8 +262,62 @@ class Helper {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const bodyText = (page: Page) => page.evaluate("document.body ? document.body.innerText.slice(0, 6000) : ''").catch(() => "") as Promise<string>;
 
+/** Where Google Chrome is installed. */
+function chromePath(): string | null {
+  const candidates =
+    process.platform === "darwin"
+      ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", path.join(process.env.HOME ?? "", "Applications/Google Chrome.app/Contents/MacOS/Google Chrome")]
+      : process.platform === "win32"
+        ? [process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA].filter(Boolean).map((d) => path.join(d!, "Google/Chrome/Application/chrome.exe"))
+        : ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable"];
+  return candidates.find((p) => fs.existsSync(p)) ?? null;
+}
+
+/**
+ * Is a Chrome running on this profile? Chrome's lock is a symlink to "<host>-<process id>" that
+ * points at nothing (so fs.existsSync says no); one left behind by a crash names a dead process.
+ */
+export function profileInUse(dir: string): boolean {
+  if (process.platform === "win32") return fs.existsSync(path.join(dir, "lockfile"));
+  try {
+    const pid = Number(fs.readlinkSync(path.join(dir, "SingletonLock")).match(/-(\d+)$/)?.[1]);
+    if (!pid) return true;
+    process.kill(pid, 0); // throws when no such process
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM"; // alive, someone else's
+  }
+}
+
+/**
+ * Some sign-in pages (Google and Microsoft accounts, some company sites) refuse a browser that a
+ * program controls. This opens ordinary Chrome, with the helper's own profile, for you to sign
+ * in yourself; when you close it, the helper's Chrome is already signed in.
+ */
+async function signIn(url: string) {
+  const chrome = chromePath();
+  if (!chrome) {
+    console.log("Couldn't find Google Chrome. Install it, then try again.");
+    process.exit(1);
+  }
+  fs.mkdirSync(CHROME_DIR, { recursive: true });
+  // One Chrome per profile: if the helper's Chrome is open, this would only open a tab in it.
+  if (profileInUse(CHROME_DIR)) {
+    console.log("The helper's Chrome is still open. Stop the helper (Ctrl+C in its window), then run this again.");
+    process.exit(1);
+  }
+  console.log("Opening Chrome. Sign in there yourself, then quit that Chrome (Cmd+Q) to save it.");
+  const child = spawn(chrome, [`--user-data-dir=${CHROME_DIR}`, "--no-first-run", "--no-default-browser-check", url], { stdio: "ignore" });
+  await new Promise((done) => child.on("exit", done));
+  console.log('Saved. Start the helper again with "npm run helper" and press Autofill; that site is already signed in.');
+}
+
 async function main() {
   const [cmd, ...args] = process.argv.slice(2);
+  if (cmd === "signin") {
+    await signIn(args[0] && /^https?:\/\//.test(args[0]) ? args[0] : "https://accounts.google.com/");
+    return;
+  }
   if (cmd === "connect") {
     const [site, token] = args;
     if (!site || !/^https?:\/\//.test(site) || !token?.startsWith("jhh_")) {

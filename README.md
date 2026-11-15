@@ -93,6 +93,7 @@ Fills application forms in Chrome on your laptop (it needs Google Chrome):
 3. Whenever you want to apply: `npm run helper` in this folder, then press **Autofill** on a job (also from your phone; it waits for the helper). A Chrome window opens and fills the form.
 4. Questions it can't answer show on the job page. Answer them there and they're typed in; tick *Remember* to reuse an answer on every future form. Things only you can do (a consent box, a missing work-history entry) are listed too: do them in Chrome and press **Carry on**.
 5. Check the form in Chrome and press **Submit** yourself. The job moves to **Applied** in your tracker.
+6. A site won't let you sign in in the helper's Chrome (Google or Microsoft accounts, some company sites)? Stop the helper, run `npm run helper -- signin <the sign-in page's address>`, sign in in the ordinary Chrome window that opens, and quit it (Cmd+Q). The helper's Chrome is then signed in too.
 
 The helper never presses Submit, never ticks agreements or consent boxes, and never types passwords. It stops by itself after 30 minutes with nothing to do (`HELPER_IDLE_MINUTES` changes that). Its files live in `~/.jobhunt-helper/`, including its own Chrome profile, separate from your everyday Chrome.
 
