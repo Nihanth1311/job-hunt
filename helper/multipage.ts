@@ -14,6 +14,7 @@ import { NEXT_JS, SCAN_JS, START_JS, STATE_JS, type FormField, type PageState } 
 
 const MAX_PAGES = 15;
 const MAX_STARTS = 4;
+const WORKDAY_HOST = /^https:\/\/[^/]*\.(myworkdayjobs|myworkdaysite|workday)\.com\//i;
 
 /** One multi-page application being worked through. */
 export interface Flow {
@@ -69,6 +70,9 @@ async function settle(page: Page) {
  */
 export async function advance(flow: Flow): Promise<Outcome> {
   const { page, task } = flow;
+  // A company careers page that hands over to Workday (in this tab or a new one): from here on,
+  // the helper presses Next itself.
+  if (!flow.autoNext && WORKDAY_HOST.test(page.url())) flow.autoNext = true;
   let questions: AutofillQuestion[] = [];
   const notes: string[] = [];
   const out = (status: RunStatus, message: string): Outcome => {

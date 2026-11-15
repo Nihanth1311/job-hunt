@@ -39,6 +39,8 @@ interface Open {
   resume?: string;
   /** Workday and guided company sites: where it is in a form of several pages. */
   flow?: Flow;
+  /** Tabs it moved on from (a careers page that opened the form in a new tab): closed with it. */
+  left: Page[];
 }
 
 class Helper {
@@ -105,11 +107,12 @@ class Helper {
           return;
         }
         const thanksBefore = SUBMITTED_TEXT.test(await bodyText(page));
-        open = { page, task, resumePath, thanksBefore, url: page.url(), filled: [] };
+        open = { page, task, resumePath, thanksBefore, url: page.url(), filled: [], left: [] };
         if (multi) {
           open.flow = { page, task, resumePath, autoNext: task.platform === "workday", starts: 0, resumeDone: false, pages: [], filled: [], sig: "", index: -1, status: null, busy: false };
         }
         this.open.set(task.runId, open);
+        this.followTabs(task.runId, open, page);
       } else {
         log(task.status === "answered" ? `Filling your answers into ${label}` : `Carrying on with ${label}`);
         open.task = task;
@@ -177,6 +180,37 @@ class Helper {
     }
   }
 
+  /**
+   * Careers pages often open the real form in a new tab (PUMA's "Apply now" opens Workday). Move
+   * with it: the new tab becomes the form, and the old one is closed when the run ends.
+   */
+  private followTabs(runId: string, o: Open, page: Page) {
+    page.on("popup", (tab) => {
+      if (this.open.get(runId) !== o || o.page !== page) return;
+      log(`${o.task.job.company}: the form opened in a new tab; following it.`);
+      o.left.push(page);
+      o.page = tab;
+      o.url = "";
+      o.thanksBefore = true; // until the new page has loaded and been read
+      if (o.flow) {
+        o.flow.page = tab;
+        o.flow.sig = "";
+        o.flow.index = -1;
+        o.flow.starts = 0;
+        if (o.flow.status && o.flow.status !== "waiting") o.flow.status = "waiting";
+      }
+      this.lastBusy = Date.now();
+      tab
+        .waitForLoadState("domcontentloaded", { timeout: 60_000 })
+        .then(async () => {
+          o.url = tab.url();
+          o.thanksBefore = SUBMITTED_TEXT.test(await bodyText(tab));
+        })
+        .catch(() => {});
+      this.followTabs(runId, o, tab);
+    });
+  }
+
   /** Look at the open forms: submitted? closed? moved on? */
   private async watch() {
     for (const [runId, o] of this.open) {
@@ -204,7 +238,7 @@ class Helper {
     if (!o) return;
     this.open.delete(runId);
     if (why) log(`${o.task.job.company}: ${why}`);
-    await o.page.close().catch(() => {});
+    for (const p of [o.page, ...o.left]) await p.close().catch(() => {});
   }
 
   private async download(task: HelperTask): Promise<string> {

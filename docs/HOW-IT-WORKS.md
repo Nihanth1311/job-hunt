@@ -413,6 +413,15 @@ in Workday's search box, GPA). New answers: when you started your current job, y
 stream?" is written from your degree; "how soon can you join?" uses your notice period.
 **Lesson:** "starts with" is a fine way to match words and a wrong way to match numbers.
 
+### The careers page that opens Workday in a new tab
+**Problem:** PUMA's careers page has an "Apply now" button that opens Workday in a *new tab*. The
+helper only watched the tab it had opened, so after you signed in on Workday it kept looking at
+the careers page, and "Carry on" brought that page back to the front.
+**Change:** when the form's tab opens another tab, the helper moves to the new one (the old tab is
+closed when the run ends), and once a guided company site has handed over to Workday it works the
+Workday way: it waits for your sign-in, then fills and presses Save and Continue up to Submit.
+**Lesson:** follow the user, not the URL you started from.
+
 ### Resume names, every resume in one list, rejected jobs cleared
 **What:** resumes are named "role type · company · job title" ("FE · Stripe · Frontend Engineer",
 "BE · Base"); a one-off migration ([0009_rename_resumes.sql](../drizzle/0009_rename_resumes.sql))
