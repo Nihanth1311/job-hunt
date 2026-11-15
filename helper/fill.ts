@@ -140,7 +140,11 @@ async function fillField(
   } else {
     d = decide(label, ctx);
   }
-  if (d.skip) return;
+  if (d.skip) {
+    // Left empty on purpose (race, middle name…); if the form insists, it's your call.
+    if (f.required && !f.value) questions.push({ label, kind: f.kind, required: true, options: f.options?.length ? f.options : undefined });
+    return;
+  }
   if (f.value) {
     // Pre-filled by the site: replace it only with an answer from your Profile that differs.
     if (d.value === null || d.value === "" || d.agreement || /decline|prefer not|don.?t wish/i.test(d.value)) return;
@@ -267,14 +271,26 @@ async function put(page: Page, f: FormField, answer: string, options: string[]):
       if (!iso) return null;
       const [y, m, d] = iso.split("-");
       if (f.dateParts?.length) {
-        // Workday: type into each box (Month, Day, Year) in turn.
+        // Workday: type into each box (Month, Day, Year) in turn. The boxes sit under the "MM",
+        // "DD", "YYYY" text you see, which takes clicks, so focus them instead.
         const digits: Record<string, string> = { m, d, y };
+        const box = (p: string) => page.locator(`[data-jh="${f.id}"] [data-jh-part="${p}"]`).first();
+        const typed = async () => {
+          for (const p of f.dateParts!) if (!/\d/.test(await box(p).inputValue().catch(() => ""))) return false;
+          return true;
+        };
         for (const p of f.dateParts) {
-          const box = page.locator(`[data-jh="${f.id}"] [data-jh-part="${p}"]`).first();
-          await box.click({ timeout: 4000 });
-          await box.pressSequentially(digits[p], { delay: 40 });
+          await box(p).focus({ timeout: 4000 });
+          await page.keyboard.press("ControlOrMeta+a").catch(() => {});
+          await page.keyboard.type(digits[p], { delay: 60 });
+        }
+        if (!(await typed())) {
+          // Workday moves to the next box by itself: type the whole date from the first one.
+          await box(f.dateParts[0]).focus({ timeout: 4000 });
+          await page.keyboard.type(f.dateParts.map((p) => digits[p]).join(""), { delay: 60 });
         }
         await page.keyboard.press("Tab").catch(() => {});
+        if (!(await typed())) return null;
       } else {
         const format = f.dateFormat || "YYYY-MM-DD";
         await el.fill(format.replace("YYYY", y).replace("MM", m).replace("DD", d));

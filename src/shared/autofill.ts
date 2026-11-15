@@ -164,7 +164,7 @@ export const ANSWER_FIELDS: AnswerField[] = [
     label: "Race / ethnicity",
     group: "Diversity (optional)",
     options: ["Asian", "White", "Black or African American", "Hispanic or Latino", "Two or more races", DECLINE],
-    hint: "Matched to each form's wording, e.g. “Asian (India)”. Empty: “decline” is chosen.",
+    hint: "Matched to each form's wording, e.g. “Asian (India)”. Empty: the question is left empty.",
   },
   {
     key: "lgbtq",
@@ -311,7 +311,7 @@ type Ctx = { contact: Contact; fields: AnswerFields };
 type Rule = { re: RegExp; pick: (c: Ctx) => Answer; from: "profile" | "bank" };
 
 /** From About you. */
-const P = (re: RegExp, pick: keyof Contact | ((c: Ctx) => string | null)): Rule => ({
+const P = (re: RegExp, pick: keyof Contact | ((c: Ctx) => Answer)): Rule => ({
   re,
   pick: typeof pick === "function" ? pick : (c) => c.contact[pick] || null,
   from: "profile",
@@ -362,9 +362,10 @@ const RULES: Rule[] = [
   // Diversity questions: your answers when you've given them, else the form's "decline" option.
   P(/hispanic|latin[oa]/, (c) => {
     const e = answerOf(c.fields, "ethnicity");
-    return !e || e === DECLINE ? DECLINE : /hispanic|latin/i.test(e) ? "Yes" : "No";
+    return !e ? SKIP : e === DECLINE ? DECLINE : /hispanic|latin/i.test(e) ? "Yes" : "No";
   }),
-  P(/\brace\b|ethnic/, (c) => answerOf(c.fields, "ethnicity") || DECLINE),
+  // Race and ethnicity: your answer if you gave one; otherwise the question is left empty.
+  P(/\brace\b|ethnic/, (c) => answerOf(c.fields, "ethnicity") || SKIP),
   P(/lgbt|queer|sexual (or gender )?minorit|transgender|gender (non ?conforming|minority)/, (c) => {
     const own = answerOf(c.fields, "lgbtq");
     if (own) return own;

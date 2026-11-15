@@ -442,6 +442,15 @@ differs from your Profile answer is replaced with yours. On later visits nothing
 touched, so your own edits stay; typed text and "prefer not to say" never replace anything.
 **Lesson:** "don't overwrite" protects the user's edits, not the site's guesses; tell them apart.
 
+### Workday's date boxes take no clicks
+**Problem:** Date of Birth stayed empty on real Workday forms. Its Month, Day and Year boxes sit
+under the "MM / DD / YYYY" text you see, which takes the click, so the helper's click timed out.
+**Change:** the boxes are focused and typed into directly, read back afterwards, and if they're
+still empty the whole date is typed from the first box (Workday moves along by itself). Also,
+race and ethnicity are now left empty unless you've given an answer (no more "prefer not to
+say" chosen for you), and a question left empty on purpose that turns out required comes to you.
+**Lesson:** a stand-in page proves the logic, not the real page's quirks: copy the quirks in.
+
 ### Resume names, every resume in one list, rejected jobs cleared
 **What:** resumes are named "role type · company · job title" ("FE · Stripe · Frontend Engineer",
 "BE · Base"); a one-off migration ([0009_rename_resumes.sql](../drizzle/0009_rename_resumes.sql))
