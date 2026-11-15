@@ -114,6 +114,7 @@ const DECLINE = "Prefer not to say";
 export const ANSWER_FIELDS: AnswerField[] = [
   { key: "dob", label: "Date of birth", group: "About you", type: "date" },
   { key: "nationality", label: "Nationality", group: "About you", default: "Indian" },
+  { key: "languages", label: "Languages you speak", group: "About you", default: "English", placeholder: "English, Hindi, Telugu", hint: "Workday's Languages section gets one entry each, marked fluent." },
   { key: "howHeard", label: "How you heard about jobs", group: "About you", default: "Company careers site", hint: "Matched to each form's wording, e.g. “Barclays Careers Website”." },
 
   { key: "workAuthorization", label: "Authorised to work in India?", group: "Usual yes/no questions", options: YES_NO, default: "Yes" },
@@ -599,6 +600,7 @@ const SAME_THING = [
   /\bm\.?\s?(tech|e|sc|ca|ba|s)\b|master|post ?graduate|\bmba\b/i,
   /\bit\b|information technology|software|technology|computer/i,
   /bank|financial services|fintech|finance/i,
+  /fluent|native|bilingual|full professional|advanced|expert|excellent|proficient/i,
 ];
 
 /** Questions about this company in particular ("Why Stripe?"): kept for this form, not remembered by default. */

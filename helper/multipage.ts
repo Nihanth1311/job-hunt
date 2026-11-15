@@ -10,7 +10,7 @@
 import type { Page } from "playwright-core";
 import type { AutofillQuestion, AutofillReport, HelperTask, RunStatus } from "../src/shared/autofill";
 import { fillForm } from "./fill";
-import { NEXT_JS, SCAN_JS, START_JS, STATE_JS, type FormField, type PageState } from "./scan";
+import { ADDS_JS, NEXT_JS, SCAN_JS, START_JS, STATE_JS, type FormField, type PageState } from "./scan";
 
 const MAX_PAGES = 15;
 const MAX_STARTS = 4;
@@ -95,7 +95,8 @@ export async function advance(flow: Flow): Promise<Outcome> {
       return out("waiting", "Sign in, or create your account, in the Chrome window. The helper never types passwords or codes; it carries on by itself once you're in.");
     }
 
-    if (!isForm(fields)) {
+    // My Experience with every section empty is still a page to fill: its Add buttons open entries.
+    if (!isForm(fields) && !(flow.autoNext && ((await page.evaluate(ADDS_JS)) as string[]).length)) {
       if (flow.autoNext && flow.starts < MAX_STARTS) {
         const start = (await page.evaluate(`${START_JS}(${flow.resumePath ? "true" : "false"})`)) as string;
         if (start) {
@@ -118,8 +119,9 @@ export async function advance(flow: Flow): Promise<Outcome> {
     }
 
     const step = s.step || s.heading || `Page ${flow.pages.length + 1}`;
-    if (!flow.pages.includes(step)) flow.pages.push(step);
-    const result = await fillForm(page, task, flow.resumePath, { multipage: true, resumeDone: flow.resumeDone });
+    const firstVisit = !flow.pages.includes(step);
+    if (firstVisit) flow.pages.push(step);
+    const result = await fillForm(page, task, flow.resumePath, { multipage: true, resumeDone: flow.resumeDone, firstVisit });
     if (result.uploaded) {
       flow.resumeDone = true;
       flow.resume ??= result.report.resume;

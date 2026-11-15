@@ -422,6 +422,26 @@ closed when the run ends), and once a guided company site has handed over to Wor
 Workday way: it waits for your sign-in, then fills and presses Save and Continue up to Submit.
 **Lesson:** follow the user, not the URL you started from.
 
+### Workday's lists load late, and My Experience starts empty
+**Problem:** "How did you hear about us?" got "Company careers site" typed into it, which found
+nothing: Workday fetches that list after the click, the helper looked after 0.4 s, saw no list
+and searched instead. And My Experience often opens with Work Experience, Education and Languages
+empty, just an "Add" button each, so there was nothing for the helper to fill.
+**Change:** it waits for Workday's lists (and for the second level after choosing a category,
+then takes whatever that offers), and searches only when there is no list. On My Experience it
+presses Add for your current job, your degree and each language in the new "Languages you speak"
+answer, then fills those entries.
+**Lesson:** "nothing there" and "nothing there *yet*" look the same unless you wait.
+
+### Answers Workday filled in itself
+**Problem:** "Will you require visa sponsorship?" showed "Yes" although the answer is No: Workday
+had filled it ("Use My Last Application" / the resume reader), and the helper never touches a
+filled box.
+**Change:** the first time the helper is on a page, a pre-filled choice (dropdown, radio) that
+differs from your Profile answer is replaced with yours. On later visits nothing filled is
+touched, so your own edits stay; typed text and "prefer not to say" never replace anything.
+**Lesson:** "don't overwrite" protects the user's edits, not the site's guesses; tell them apart.
+
 ### Resume names, every resume in one list, rejected jobs cleared
 **What:** resumes are named "role type · company · job title" ("FE · Stripe · Frontend Engineer",
 "BE · Base"); a one-off migration ([0009_rename_resumes.sql](../drizzle/0009_rename_resumes.sql))

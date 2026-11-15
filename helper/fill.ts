@@ -4,7 +4,7 @@
 
 import type { Page } from "playwright-core";
 import { answerOf, decide, pickOption, type AutofillQuestion, type AutofillReport, type Decision, type HelperTask } from "../src/shared/autofill";
-import { OPTIONS_JS, SCAN_JS, type FormField } from "./scan";
+import { ADDS_JS, OPTIONS_JS, SCAN_JS, type EntryKind, type FormField } from "./scan";
 
 export interface FillResult {
   report: AutofillReport;
@@ -21,6 +21,12 @@ export interface FillOptions {
   multipage?: boolean;
   /** The resume is already on this application (an earlier page), so a non-required box can stay empty. */
   resumeDone?: boolean;
+  /**
+   * The first time on this page: answers Workday filled in itself (from "Use My Last Application"
+   * or your resume) are replaced with yours. Later visits leave every filled box alone, so a
+   * change you made yourself is never undone.
+   */
+  firstVisit?: boolean;
 }
 
 const RESUME = /resume|\bcv\b|curriculum/i;
@@ -81,6 +87,8 @@ export async function fillForm(page: Page, task: HelperTask, resumePath: string 
     }
   }
 
+  if (opts.multipage) fields = await openEntries(page, task, fields);
+
   // Answering a question can reveal another ("If yes, which…?"), so look again after each pass.
   const done = new Set<string>(resumeField ? [resumeField.id] : []);
   for (let pass = 0; pass < 3; pass++) {
@@ -88,7 +96,7 @@ export async function fillForm(page: Page, task: HelperTask, resumePath: string 
     if (!todo.length) break;
     for (const f of todo) {
       done.add(f.id);
-      await fillField(page, f, ctx, filled, questions, notes);
+      await fillField(page, f, ctx, filled, questions, notes, !!opts.firstVisit);
     }
     await page.waitForTimeout(600);
     fields = await scan(page);
@@ -108,6 +116,7 @@ async function fillField(
   filled: { label: string; value: string }[],
   questions: AutofillQuestion[],
   notes: string[],
+  replacePrefilled = false,
 ) {
   const label = f.label || "(unlabelled question)";
   if (f.kind === "file") {
@@ -116,7 +125,7 @@ async function fillField(
       questions.push({ label: COVER.test(`${f.label} ${f.context}`) ? "Cover letter (attach it in Chrome)" : `${label} (attach it in Chrome)`, kind: "file", required: true, manual: true });
     return;
   }
-  if (f.value) return; // already answered: never overwrite
+  if (f.value && !(replacePrefilled && REPLACEABLE.has(f.kind) && !f.prompt && !f.inSection)) return; // already answered: never overwrite
   let d: Decision;
   if (f.inSection) {
     // Workday's Work Experience and Education entries: the first of each from your Profile;
@@ -132,6 +141,11 @@ async function fillField(
     d = decide(label, ctx);
   }
   if (d.skip) return;
+  if (f.value) {
+    // Pre-filled by the site: replace it only with an answer from your Profile that differs.
+    if (d.value === null || d.value === "" || d.agreement || /decline|prefer not|don.?t wish/i.test(d.value)) return;
+    if (pickOption(d.value, [f.value]) === f.value) return;
+  }
   if (d.agreement) {
     questions.push({ label, kind: f.kind, required: f.required, agreement: true });
     return;
@@ -156,6 +170,49 @@ async function fillField(
   }
 }
 
+/** "English, Hindi; Telugu" → ["English", "Hindi", "Telugu"] */
+const languagesOf = (fields: Record<string, string>) =>
+  (answerOf(fields, "languages") ?? "")
+    .split(/[,;\n/]|\band\b/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+
+/** How many entries of each kind to have open: your current job, your degree, each language. */
+function entriesWanted(fields: Record<string, string>): Record<EntryKind, number> {
+  return { work: answerOf(fields, "currentCompany") ? 1 : 0, education: answerOf(fields, "college") ? 1 : 0, languages: languagesOf(fields).length };
+}
+
+/** The entries open now, by kind: "Work Experience 1", "Languages 2"… */
+function entriesOpen(fields: FormField[], kind: EntryKind): number {
+  return new Set(fields.filter((f) => f.inSection === kind).map((f) => f.label.split(" › ")[0])).size;
+}
+
+/**
+ * Workday's My Experience often starts with Work Experience, Education and Languages empty, just
+ * an "Add" button each. Press Add until the entries it can fill are open, then fill as usual.
+ */
+async function openEntries(page: Page, task: HelperTask, fields: FormField[]): Promise<FormField[]> {
+  const wanted = entriesWanted(task.bank.fields);
+  for (const kind of ["work", "education", "languages"] as EntryKind[]) {
+    for (let tries = 0; tries < wanted[kind] + 1 && entriesOpen(fields, kind) < wanted[kind]; tries++) {
+      const adds = (await page.evaluate(ADDS_JS)) as EntryKind[];
+      if (!adds.includes(kind)) break;
+      const before = entriesOpen(fields, kind);
+      await page.locator(`[data-jh-add="${kind}"]`).first().click({ timeout: 4000 }).catch(() => {});
+      for (let t = 0; t < 12 && entriesOpen(fields, kind) <= before; t++) {
+        await page.waitForTimeout(400);
+        fields = await scan(page);
+      }
+      if (entriesOpen(fields, kind) <= before) break; // the button did nothing: leave it to you
+    }
+  }
+  return fields;
+}
+
+/** Pre-filled answers worth correcting: chosen from a list, not typed (typed ones may be your edits). */
+const REPLACEABLE = new Set<string>(["select", "radio", "combobox"]);
+
 const SKIP_ENTRY = "\u0000skip";
 
 /**
@@ -166,6 +223,15 @@ function entryAnswer(f: FormField, fields: Record<string, string>, city: string)
   const [entry, ...rest] = f.label.split(" › ");
   const field = (rest.join(" › ") || entry).toLowerCase();
   const first = /\b1$/.test(entry.trim());
+  if (f.inSection === "languages") {
+    // Languages 1, 2…: one per language in your answers, marked fluent.
+    const lang = languagesOf(fields)[Number(entry.match(/(\d+)\s*$/)?.[1] ?? 1) - 1];
+    if (!lang) return null;
+    if (/fluent|native/.test(field)) return "Yes";
+    if (/proficien|reading|writing|speaking|comprehension|overall|level/.test(field)) return "Fluent";
+    if (/language/.test(field)) return lang;
+    return null;
+  }
   const a = (k: string) => answerOf(fields, k) || null;
   if (f.inSection === "work" && first) {
     const working = !!a("currentCompany");
@@ -272,11 +338,24 @@ async function clickChoice(page: Page, f: FormField, i: number) {
   }
 }
 
+/**
+ * The dropdown's choices as they are now. Workday fetches its lists from the server after the
+ * click, so wait up to `ms` for them to appear (or, with `not`, to change from that list).
+ */
+async function readOptions(page: Page, f: FormField, ms: number, not?: string[]): Promise<string[]> {
+  const until = Date.now() + ms;
+  for (;;) {
+    const opts = (await page.evaluate(`${OPTIONS_JS}(${JSON.stringify(f.id)})`)) as string[];
+    const fresh = opts.length > 0 && (!not || opts.join("\n") !== not.join("\n"));
+    if (fresh || Date.now() >= until) return fresh ? opts : not ? [] : opts;
+    await page.waitForTimeout(250);
+  }
+}
+
 /** Open a custom dropdown and read its choices (empty for ones that search as you type). */
 async function openDropdown(page: Page, f: FormField): Promise<string[]> {
   await at(page, f).click({ timeout: 4000 }).catch(() => {});
-  await page.waitForTimeout(400);
-  return (await page.evaluate(`${OPTIONS_JS}(${JSON.stringify(f.id)})`)) as string[];
+  return readOptions(page, f, f.prompt ? 3000 : 600);
 }
 
 /**
@@ -289,6 +368,11 @@ async function pickInDropdown(page: Page, f: FormField, answer: string, options:
   let choice = opts.length ? pickOption(answer, opts) : null;
   // A list behind a button (Workday) can't be typed into: no match means asking you.
   const typable = await input.evaluate((e) => e.tagName === "INPUT" || e.tagName === "TEXTAREA");
+  if (!choice && !opts.length) {
+    // The list may still be loading: give it a moment before falling back to typing a search.
+    opts = await readOptions(page, f, 2500);
+    choice = opts.length ? pickOption(answer, opts) : null;
+  }
   if (!choice && typable) {
     await input.click({ timeout: 4000 }).catch(() => {});
     await input.fill("");
@@ -303,6 +387,14 @@ async function pickInDropdown(page: Page, f: FormField, answer: string, options:
     }
     const first = answer.toLowerCase().split(/[,\s]+/)[0];
     choice = pickOption(answer, opts) ?? opts.find((o) => o.toLowerCase().startsWith(first)) ?? null;
+    if (!choice) {
+      // Nothing found by searching ("How did you hear about us?" lists categories, not words to
+      // search for): empty the box so the full list comes back, and choose from that.
+      await input.fill("").catch(() => {});
+      await page.waitForTimeout(300);
+      opts = await readOptions(page, f, 2500);
+      choice = opts.length ? pickOption(answer, opts) : null;
+    }
   }
   if (!choice) {
     await input.fill("").catch(() => {});
@@ -310,9 +402,9 @@ async function pickInDropdown(page: Page, f: FormField, answer: string, options:
     return null;
   }
   await page.locator(`[data-jh-pick="${opts.indexOf(choice)}"]`).first().click({ timeout: 4000 });
-  await page.waitForTimeout(700);
-  // Some lists have a second level (Workday: "Website" → "Barclays Careers Website"): pick there too.
-  const sub = (await page.evaluate(`${OPTIONS_JS}(${JSON.stringify(f.id)})`)) as string[];
+  // Some lists have a second level (Workday: "Career Website" → "PUMA Careers Site"): pick there
+  // too, whatever it offers, after it has loaded.
+  const sub = await readOptions(page, f, 2500, opts);
   if (sub.length && !sub.includes(choice)) {
     const second = pickOption(answer, sub) ?? sub.find((o) => !/^other\b/i.test(o)) ?? null;
     if (second) {

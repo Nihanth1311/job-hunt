@@ -21,12 +21,52 @@ export interface FormField {
   buttons?: boolean;
   /** A file field that already holds a file. */
   hasFile?: boolean;
-  /** Inside a Workday repeating entry: "work" (work experience), "education", or "other" (languages, skills, websites). */
-  inSection?: "work" | "education" | "other";
+  /** Inside a Workday repeating entry: "work" (work experience), "education", "languages", or "other" (skills, websites). */
+  inSection?: EntryKind | "other";
   /** Date fields: the format a text box wants ("DD/MM/YYYY"), or the separate boxes Workday uses (m, d, y). */
   dateFormat?: string;
   dateParts?: string[];
+  /** Workday's search-box lists, which load from the server after a click. */
+  prompt?: boolean;
 }
+
+export type EntryKind = "work" | "education" | "languages";
+
+/**
+ * Workday's "Add" buttons for Work Experience, Education and Languages (on My Experience, those
+ * sections often start empty). Each is tagged data-jh-add="<kind>" so it can be clicked.
+ */
+export const ADDS_JS = String.raw`(() => {
+  const txt = (el) => (el ? (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim() : "");
+  const vis = (el) => {
+    const r = el.getBoundingClientRect();
+    return (r.width > 0 || r.height > 0) && getComputedStyle(el).visibility !== "hidden";
+  };
+  document.querySelectorAll("[data-jh-add]").forEach((b) => b.removeAttribute("data-jh-add"));
+  const out = [];
+  for (const b of document.querySelectorAll("button, [role=button]")) {
+    if (!vis(b) || b.disabled) continue;
+    if (b.getAttribute("data-automation-id") !== "add-button" && !/^add( another)?$/i.test(txt(b))) continue;
+    // Which section: the group it sits in, or else the nearest heading above it.
+    let name = "";
+    const g = b.closest("[role=group][aria-labelledby]");
+    if (g) {
+      const id = g.getAttribute("aria-labelledby");
+      name = id + " " + txt(document.getElementById(id));
+    }
+    if (!/work|education|language/i.test(name)) {
+      for (let p = b.parentElement; p && p !== document.body; p = p.parentElement) {
+        const h = p.querySelector("h2, h3, h4, legend");
+        if (h) { name = txt(h); break; }
+      }
+    }
+    const kind = /work/i.test(name) ? "work" : /education/i.test(name) ? "education" : /language/i.test(name) ? "languages" : "";
+    if (!kind || out.includes(kind)) continue;
+    b.setAttribute("data-jh-add", kind);
+    out.push(kind);
+  }
+  return out;
+})()`;
 
 export const SCAN_JS = String.raw`(() => {
   const clean = (s) => (s || "").replace(/\s+/g, " ").replace(/[\s*✱]+$/, "").trim();
@@ -109,7 +149,7 @@ export const SCAN_JS = String.raw`(() => {
     // Inside a Workday entry (Work Experience 1, Education 1…): say which, and name the entry in the label.
     const section = type === "file" ? null : sectionOf(el);
     const sectionId = section ? section.getAttribute("aria-labelledby") || "" : "";
-    const sectionKind = !section ? "" : /work/i.test(sectionId) ? "work" : /education/i.test(sectionId) ? "education" : "other";
+    const sectionKind = !section ? "" : /work/i.test(sectionId) ? "work" : /education/i.test(sectionId) ? "education" : /language/i.test(sectionId) ? "languages" : "other";
     const panel = section ? panelOf(el) : "";
     const add = (o) => out.push(section ? { ...o, inSection: sectionKind, label: (panel ? panel + " › " : "") + o.label } : o);
 
@@ -155,7 +195,7 @@ export const SCAN_JS = String.raw`(() => {
       const l = labelOf(el);
       const holder = el.closest("[data-automation-id^=formField-]") || boxOf(el);
       const chosen = holder ? [...holder.querySelectorAll("[data-automation-id=selectedItemList] [data-automation-id=menuItem], [data-automation-id=selectedItem]")].map(txt) : [];
-      add({ id: tag(el), kind: "combobox", label: l.text, required: el.getAttribute("aria-required") === "true" || starred(l.el), value: chosen.join(", ") });
+      add({ id: tag(el), kind: "combobox", label: l.text, required: el.getAttribute("aria-required") === "true" || starred(l.el), value: chosen.join(", "), prompt: true });
       continue;
     }
 
