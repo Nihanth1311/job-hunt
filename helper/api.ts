@@ -4,8 +4,10 @@
 import type { AutofillReport, HelperTask, RunStatus } from "../src/shared/autofill";
 import type { Config } from "./config";
 
+/** The site answered 401: this laptop's token no longer works. The helper stops instead of trying again. */
 export class LinkError extends Error {}
 
+/** The four requests the helper makes: hello and next (GET /api/helper/next), report (POST …/runs/<id>), resume (GET …/runs/<id>/resume). */
 export class Site {
   constructor(private readonly config: Config) {}
 
@@ -60,6 +62,7 @@ export class Site {
     return ((await res.json()) as { status: RunStatus }).status;
   }
 
+  /** Download the resume PDF chosen for this form. */
   async resume(runId: string): Promise<Buffer> {
     const res = await this.call(`/api/helper/runs/${encodeURIComponent(runId)}/resume`, {}, 120_000);
     if (!res.ok) {

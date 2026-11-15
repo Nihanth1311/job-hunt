@@ -22,6 +22,7 @@ const HEADERS = {
   "accept-language": "en-IN,en;q=0.9",
 };
 
+/** One request with a 30-second limit and no caching. On "slow down" answers it waits 3 s, then 6 s, and tries again. */
 async function request(url: string, init: RequestInit = {}, attempt = 0): Promise<Response> {
   const res = await fetch(url, {
     ...init,
@@ -38,6 +39,7 @@ async function request(url: string, init: RequestInit = {}, attempt = 0): Promis
   return res;
 }
 
+/** GET and parse JSON. A site that answers with an HTML page instead (a block page, a login wall) gives a readable error. */
 export async function getJson<T>(url: string): Promise<T> {
   const body = await (await request(url)).text();
   try {
@@ -69,6 +71,7 @@ export async function inBatches<T, R>(items: T[], size: number, fn: (item: T) =>
 export const TECH_TITLE =
   /\b(engineer(ing)?|developer|sde|swe|software|devops|dev ops|sre|site reliability|full[\s-]?stack|front[\s-]?end|back[\s-]?end|programmer|cloud|platform|infrastructure|automation|qa|sdet|test(ing)?|data|machine learning|ml|ai|security|architect|technolog(y|ist)|it analyst|systems? analyst|application|technical)\b/i;
 
+/** A real date within the last MAX_AGE_DAYS. Jobs with no date fail this, so they're left out. */
 export function isRecent(date: Date | null): date is Date {
   return Boolean(date && !Number.isNaN(date.getTime()) && Date.now() - date.getTime() <= MAX_AGE_DAYS * 86_400_000);
 }

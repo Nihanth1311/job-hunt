@@ -1,3 +1,7 @@
+// Small text tools: turning the HTML that job sites send into readable plain text, tidying odd
+// characters, and reducing names to a plain form for spotting duplicates.
+
+/** HTML's named characters (&amp; &nbsp; …) and what they stand for. */
 const ENTITIES: Record<string, string> = {
   amp: "&",
   lt: "<",
@@ -16,6 +20,7 @@ const ENTITIES: Record<string, string> = {
   rupee: "₹",
 };
 
+/** "&amp;" → "&", "&#8377;" → "₹", "&#x20B9;" → "₹". Unknown names are left as they are. */
 export function decodeEntities(s: string): string {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, code: string) => {
     if (code[0] === "#") {
@@ -61,6 +66,7 @@ export function cleanTitle(s: string): string {
     .trim();
 }
 
+/** Clean up spacing: single spaces, no space around line breaks, at most one blank line in a row. */
 export function tidy(s: string): string {
   return normalizeChars(s)
     .replace(/\r/g, "")

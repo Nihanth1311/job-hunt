@@ -7,10 +7,16 @@ import { getJson } from "./http";
 import type { JobSource } from "./";
 import { REGISTRY_BOARDS } from "./companies/registry";
 
-// Public company job boards. No keys, no limits worth worrying about. Every link here
+// Public company job boards. Greenhouse, Lever and Ashby are hiring systems (ATS) that companies
+// rent; each one publishes every customer's open jobs as JSON at a public address, meant for
+// exactly this kind of reading. No keys, no limits worth worrying about. Every link here
 // is the official posting on the company's own careers site.
-// Add companies in Settings as "greenhouse:<slug>", "lever:<slug>" or "ashby:<slug>" —
-// the slug is the last part of the company's careers URL, e.g. jobs.lever.co/<slug>.
+//
+// The three *Board functions below are used twice:
+//   - by the built-in company list (companies/index.ts), for companies on these systems;
+//   - by the three "user" sources at the bottom of each section, for extra boards a person adds
+//     in Settings as "greenhouse:<slug>", "lever:<slug>" or "ashby:<slug>". The slug is the last
+//     part of the company's careers URL, e.g. jobs.lever.co/<slug>.
 
 /** Your own extra boards from Settings; ones the company list already covers are skipped. */
 function slugsFor(prefs: Preferences, ats: string): string[] {
@@ -21,10 +27,12 @@ function slugsFor(prefs: Preferences, ats: string): string[] {
     .filter(Boolean);
 }
 
+/** A company name from its board slug, when the board doesn't give one: "pure-storage" → "Pure Storage". */
 function prettyName(slug: string) {
   return slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/** A pay interval however the board words it → "hour" | "month" | "year" (year when it says neither), for amountToLpa. */
 function periodOf(interval: string | undefined | null): string {
   const i = (interval ?? "").toLowerCase();
   return i.includes("hour") ? "hour" : i.includes("month") ? "month" : "year";

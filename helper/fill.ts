@@ -36,7 +36,9 @@ const YES = /^(yes|y|true|checked|i agree)$/i;
 const OPTIONAL_LINK = /\b(url|website|link|portfolio|blog|profile)\b/i;
 const NO = /^(no|n|false|unchecked)$/i;
 
+/** Run the form reader inside the page (helper/scan.ts) and get its list of fields back. */
 const scan = (page: Page) => page.evaluate(SCAN_JS) as Promise<FormField[]>;
+/** The element the reader tagged for this field (data-jh="f12"), to click or type into. */
 const at = (page: Page, f: FormField) => page.locator(`[data-jh="${f.id}"]`).first();
 const short = (v: string) => (v.length > 80 ? `${v.slice(0, 77)}…` : v);
 
@@ -54,6 +56,8 @@ export async function waitForForm(page: Page): Promise<boolean> {
 /**
  * Fill everything it can. Safe to run again on the same page: fields that already hold
  * something (from you, from an earlier pass or from the site's own resume reader) are left alone.
+ * The one exception is `opts.firstVisit` on a multi-page form: there, list answers the site
+ * chose itself (and its Work Experience guesses) are replaced with yours when they differ.
  */
 export async function fillForm(page: Page, task: HelperTask, resumePath: string | null, opts: FillOptions = {}): Promise<FillResult> {
   const filled: { label: string; value: string }[] = [];
@@ -110,6 +114,10 @@ export async function fillForm(page: Page, task: HelperTask, resumePath: string 
   return { report: { filled, questions: unique, notes, resume: resumeName }, blocking, uploaded, yoursInChrome };
 }
 
+/**
+ * One field: decide the answer, then either put it in (→ `filled`), hand the question to you
+ * (→ `questions`), or leave it alone. `replacePrefilled` is fillForm's firstVisit.
+ */
 async function fillField(
   page: Page,
   f: FormField,

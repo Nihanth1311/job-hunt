@@ -1,3 +1,8 @@
+// Words and shapes the whole app shares. Two lists look alike but mean different things:
+//   Track:    which of YOUR base resumes to use (one per role type you apply as).
+//   Category: what kind of role a JOB is. It has three more values than Track: "sde" (general
+//             software roles), "internship" and "other" (not a role this app matches you to).
+
 export const TRACKS = ["frontend", "backend", "fullstack", "devops", "data", "security"] as const;
 export type Track = (typeof TRACKS)[number];
 
@@ -41,7 +46,11 @@ export function resumeName(track: string, job?: { company: string; title: string
   return `${short} · ${otherwise.trim() || "Base"}`;
 }
 
-/** How a saved resume becomes a PDF: the file you uploaded, LaTeX we compile, or plain text you print. */
+/**
+ * What a saved resume is: the PDF you uploaded, LaTeX we compile to a PDF, or plain text. The
+ * screens offer Print for a text resume; when one is chosen for autofill it's laid out as LaTeX
+ * and compiled too (getResumePdf).
+ */
 export type ResumeKind = "upload" | "latex" | "text";
 
 export const CATEGORIES = ["fullstack", "frontend", "backend", "devops", "data", "security", "sde", "internship", "other"] as const;
@@ -59,6 +68,7 @@ export const CATEGORY_LABEL: Record<Category, string> = {
   other: "Other",
 };
 
+/** A job's pay against your salary floor: at or above it, maybe (the range reaches it), below it, or not stated. */
 export type SalaryBucket = "meets" | "possible" | "below" | "unknown";
 
 export const APP_STATUSES = [
@@ -146,7 +156,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
     "backend developer",
     "devops engineer",
   ],
-  // Companies whose public boards had India tech roles open to 0–2 yrs when this list was made.
+  // Empty by default: the built-in company list (server/fetching/sources/companies/registry.ts) covers the usual ones.
   careerPages: [],
   skippedCompanies: [],
   fetchIntervalHours: 3,

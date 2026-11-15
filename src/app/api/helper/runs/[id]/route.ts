@@ -17,10 +17,13 @@ function cleanReport(r: Record<string, unknown>): AutofillReport {
       kind: (text(x.kind, 20) || "text") as NonNullable<AutofillReport["questions"]>[number]["kind"],
       required: x.required === true,
       agreement: x.agreement === true,
+      manual: x.manual === true,
       options: Array.isArray(x.options) ? x.options.slice(0, 80).map((o) => text(o, 200)).filter(Boolean) : undefined,
     })).filter((q) => q.label),
     notes: Array.isArray(r.notes) ? r.notes.slice(0, 20).map((n) => text(n, 300)).filter(Boolean) : [],
     resume: text(r.resume, 200) || undefined,
+    step: text(r.step, 120) || undefined,
+    pages: Array.isArray(r.pages) ? r.pages.slice(0, 30).map((s) => text(s, 120)).filter(Boolean) : undefined,
   };
 }
 

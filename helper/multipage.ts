@@ -12,6 +12,7 @@ import type { AutofillQuestion, AutofillReport, HelperTask, RunStatus } from "..
 import { fillForm } from "./fill";
 import { ADDS_JS, NEXT_JS, SCAN_JS, START_JS, STATE_JS, type FormField, type PageState } from "./scan";
 
+/** Safety stops: never work through more pages, or press more "Apply"-type start buttons, than this in one go. */
 const MAX_PAGES = 15;
 const MAX_STARTS = 4;
 const WORKDAY_HOST = /^https:\/\/[^/]*\.(myworkdayjobs|myworkdaysite|workday)\.com\//i;
@@ -47,6 +48,7 @@ const scan = (page: Page) => page.evaluate(SCAN_JS) as Promise<FormField[]>;
 /** A page worth filling: the application itself, not a job description with a search box. */
 const isForm = (fields: FormField[]) => fields.some((f) => f.kind === "file") || fields.filter((f) => f.kind !== "file").length >= 3;
 
+/** A short description of what the page shows now. Two different signatures mean the page changed (you signed in, or moved on). */
 export function signature(s: PageState, fields: FormField[]): string {
   return [s.gate ? "gate" : "", s.step || s.heading, s.url, fields.slice(0, 6).map((f) => f.label).join("|")].join("::");
 }

@@ -24,6 +24,7 @@ interface OracleDetail {
   items?: { ExternalDescriptionStr?: string; ExternalResponsibilitiesStr?: string; ExternalQualificationsStr?: string }[];
 }
 
+/** key = "host|siteNumber". The list comes 25 at a time, newest first (up to 250); each wanted job's details are fetched after. */
 export const readOracle: Reader = async ({ company, known }) => {
   const [host, site] = company.key.split("|");
   const api = (finder: string) =>
@@ -92,6 +93,7 @@ interface EightfoldPosition {
   jobDescription?: string;
 }
 
+/** key = "host|domain". Searches "India" 10 at a time, newest first (up to 200), then fetches each wanted job's description. */
 export const readEightfold: Reader = async ({ company, known }) => {
   const [host, domain] = company.key.split("|");
   const positions: EightfoldPosition[] = [];
@@ -147,6 +149,7 @@ interface SrDetail {
   jobAd?: { sections?: Record<string, { title?: string; text?: string }> };
 }
 
+/** key = the company's SmartRecruiters id. Lists India postings 100 at a time (up to 500), then fetches each wanted job's ad. */
 export const readSmartRecruiters: Reader = async ({ company, known }) => {
   const id = company.key;
   const postings: SrPosting[] = [];

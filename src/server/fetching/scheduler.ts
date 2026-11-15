@@ -4,9 +4,17 @@ import { allUserIds, cleanup, maybeSendMorningDigest, runFetch, unfinishedFetche
 import { ensureScored } from "../services/jobs";
 import { getPreferences, getState } from "../services/settings";
 
+// The scheduler decides WHEN automatic fetches happen; fetcher.ts does the fetching. It has no
+// clock of its own that survives a sleeping server: it is a function, tick(), that anything may
+// call ("is anything due?"). Callers: this server's own timer (below) and the outside alarm
+// clocks that hit /api/cron/fetch.
+
+/** How often the server's own timer calls tick() while the server is awake. */
 const TICK_MS = 10 * 60 * 1000;
 const g = globalThis as unknown as {
+  /** The setInterval handle: its presence means the timer is already running. */
   __jobHuntScheduler?: NodeJS.Timeout;
+  /** The pass in flight, if any. */
   __jobHuntTick?: Promise<void>;
   /** Nothing is due before this time (ms): checks until then don't touch the database. */
   __jobHuntQuietUntil?: number;
@@ -18,7 +26,8 @@ export type Wakeups = Record<string, string>;
 export const getWakeups = (): Wakeups => g.__jobHuntWakeups ?? {};
 
 /**
- * Every wake-up lands here: the server's own 10-minute timer, cron-job.org, GitHub. Most of them
+ * Every wake-up lands here: the server's own 10-minute timer, cron-job.org, GitHub. `via` says
+ * which one, for the "Alarm clocks" list in Settings. Most of them
  * find nothing due and return without touching the database. That matters: Neon's free plan
  * counts the hours the database is awake (100 a month) and only pauses it after 5 quiet minutes,
  * so a database read every 10 minutes would keep it awake all month.
@@ -62,11 +71,13 @@ async function doTick() {
 }
 
 /**
- * Runs inside the web server process: every 10 minutes while the server is awake, and once just
- * after it starts. A free server that sleeps can't rely on this alone, so external alarm clocks
- * also call /api/cron/fetch (cron-job.org every 10 minutes keeps it awake; GitHub is a backup).
+ * Runs inside the web server process: every 10 minutes while the server is awake, and once 20
+ * seconds after it starts. A free server that sleeps can't rely on this alone (a sleeping process
+ * runs no timers), so external alarm clocks also call /api/cron/fetch: GitHub Actions every hour
+ * (.github/workflows/fetch.yml) and cron-job.org on the interval set on that site.
  * All of them are safe together: a person is only fetched once per fixed time.
- * Set SCHEDULER=off to disable it (the laptop does, so it doesn't fetch alongside the live site).
+ * Set SCHEDULER=off to disable it, e.g. on a laptop that shares the live site's database, so it
+ * doesn't fetch alongside the live site.
  */
 export function startScheduler() {
   if (g.__jobHuntScheduler) return;

@@ -1,5 +1,10 @@
 "use server";
 
+// "use server" makes every exported function here a server action: a screen calls it like an
+// ordinary function, and Next.js turns that call into a request to the server, runs the function
+// there and sends the result back. Each one starts with requireUser() (or requireAdmin()), because
+// anyone could send that request by hand: the sign-in check can't be left to the screen.
+
 import { revalidatePath } from "next/cache";
 import { invite, removePerson } from "../services/accounts";
 import { requireAdmin, requireUser } from "../auth";

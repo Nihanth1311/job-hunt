@@ -10,6 +10,8 @@ import { DEFAULT_PREFERENCES, DEFAULT_PROFILE, type Preferences, type Profile } 
 // App-wide state (shared job pool, company site health) uses GLOBAL ("").
 export const GLOBAL = "";
 
+// The `settings` table is a key/value store: one row per (user, key), the value stored as JSON.
+// getValue / setValue are the only code that touches it; everything below is a named use of them.
 async function getValue<T>(userId: string, key: string): Promise<T | null> {
   const db = await getDb();
   const [row] = await db
@@ -19,6 +21,7 @@ async function getValue<T>(userId: string, key: string): Promise<T | null> {
   return (row?.value as T) ?? null;
 }
 
+/** Insert the row, or overwrite it when (user, key) already exists: an "upsert". */
 async function setValue(userId: string, key: string, value: unknown): Promise<void> {
   const db = await getDb();
   await db
@@ -27,6 +30,7 @@ async function setValue(userId: string, key: string, value: unknown): Promise<vo
     .onConflictDoUpdate({ target: [schema.settings.userId, schema.settings.key], set: { value, updatedAt: new Date() } });
 }
 
+/** The saved profile laid over the defaults, so a field added to the app later is never missing from an old profile. */
 export async function getProfile(userId: string): Promise<Profile> {
   const saved = (await getValue<Partial<Profile>>(userId, "profile")) ?? {};
   return { ...DEFAULT_PROFILE, ...saved, skills: { ...DEFAULT_PROFILE.skills, ...saved.skills } };
@@ -66,6 +70,7 @@ export const SECRET_NAMES = ["jsearchKey", "telegramBotToken", "telegramChatId"]
 export type SecretName = (typeof SECRET_NAMES)[number];
 export type Secrets = Partial<Record<SecretName, string>>;
 
+/** This person's keys, decrypted for use on the server. A key that can't be decrypted (SESSION_SECRET changed) is left out. */
 export async function getSecrets(userId: string): Promise<Secrets> {
   const db = await getDb();
   const rows = await db.select().from(schema.userSecrets).where(eq(schema.userSecrets.userId, userId));
@@ -77,6 +82,7 @@ export async function getSecrets(userId: string): Promise<Secrets> {
   return out;
 }
 
+/** Save one key, encrypted. An empty value deletes it. */
 export async function setSecret(userId: string, name: SecretName, value: string): Promise<void> {
   const db = await getDb();
   const v = value.trim();

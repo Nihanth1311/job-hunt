@@ -6,6 +6,11 @@ import { DETAIL_LIMIT, fromRelative, getJson, inBatches, isRecent, postJson, TEC
 // Workday careers sites (https://<tenant>.<wdN>.myworkdayjobs.com/<Site>) load their listings
 // from a JSON endpoint. The list says "Posted 3 Days Ago"; each job's page has the exact
 // start date and the full description.
+//
+// These are the same addresses the careers page itself calls from your browser:
+//   POST <host>/wday/cxs/<tenant>/<Site>/jobs          the list, 20 at a time, with filters ("facets")
+//   GET  <host>/wday/cxs/<tenant>/<Site><externalPath> one job's details
+// So no HTML is parsed and no browser is needed: the reader asks for the same JSON the page asks for.
 
 interface Facet {
   facetParameter: string;
@@ -58,11 +63,12 @@ export const readWorkday: Reader = async ({ company, known }) => {
   const host = `https://${tenant}.${wd}.myworkdayjobs.com`;
   const api = `${host}/wday/cxs/${tenant}/${site}`;
 
+  // Step 1: ask for one job with no filters, only to learn this site's filter ids for India.
   const first = await postJson<ListResponse>(`${api}/jobs`, { appliedFacets: {}, limit: 1, offset: 0, searchText: "" });
   const facet = indiaFacet(first.facets);
   if (!facet) throw new Error("this site has no India location filter");
 
-  // Newest first; stop at the first page that reaches "30+ Days Ago".
+  // Step 2: the India list, newest first, up to 5 pages of 20; stop at the first page that reaches "30+ Days Ago".
   const postings: NonNullable<ListResponse["jobPostings"]> = [];
   for (let offset = 0; offset < 100; offset += 20) {
     const page = await postJson<ListResponse>(`${api}/jobs`, { appliedFacets: facet, limit: 20, offset, searchText: "" });
@@ -71,11 +77,13 @@ export const readWorkday: Reader = async ({ company, known }) => {
     if (list.length < 20 || list.some((p) => /30\+/.test(p.postedOn ?? ""))) break;
   }
 
+  // Step 3: keep recent tech titles we don't already have, at most DETAIL_LIMIT per run.
   const wanted = postings
     .filter((p) => !/30\+/.test(p.postedOn ?? "") && TECH_TITLE.test(p.title))
     .filter((p) => !known("workday", `${company.id}:${p.externalPath}`))
     .slice(0, DETAIL_LIMIT);
 
+  // Step 4: open each of those (4 at a time) for its exact date and full description.
   const results = await inBatches(wanted, 4, async (p): Promise<RawJob | null> => {
     const d = (await getJson<DetailResponse>(`${api}${p.externalPath}`)).jobPostingInfo;
     const postedAt = d.startDate ? new Date(`${d.startDate}T00:00:00Z`) : fromRelative(d.postedOn ?? p.postedOn);

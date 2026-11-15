@@ -26,6 +26,7 @@ export function readConfig(): Config | null {
   }
 }
 
+/** Save the link. Mode 0600 / 0700: only your own user account on this laptop can read the token. */
 export function writeConfig(c: Config): void {
   fs.mkdirSync(HOME, { recursive: true, mode: 0o700 });
   fs.writeFileSync(CONFIG, JSON.stringify(c, null, 2), { mode: 0o600 });

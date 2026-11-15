@@ -6,6 +6,17 @@ import { randomToken } from "./crypto";
 // Google sign-in with the authorization-code flow + PKCE. The ID token comes straight from
 // Google's token endpoint over TLS, so (per OpenID Connect) its claims can be trusted
 // after checking issuer, audience, expiry and that the email is verified.
+//
+// The steps, and where each one lives:
+//   1. /api/auth/google          newFlow() makes a random `state` and a secret `verifier`; both go
+//                                into a sealed cookie, and the browser is sent to Google with the
+//                                state and a hash of the verifier (the "challenge").
+//   2. Google                    the person picks an account; Google sends the browser back to
+//                                /api/auth/google/callback with a one-time `code` and our `state`.
+//   3. /api/auth/google/callback checks the state matches the cookie (this is the flow we started),
+//                                then verifiedProfile() trades code + verifier for an ID token.
+//   4. signInVerified()          (auth/index.ts) decides whether that email may come in.
+// PKCE: Google only honours the code for whoever knows the verifier, so a stolen code is useless.
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -31,6 +42,7 @@ export function callbackUrl(req: NextRequest): string {
   return `${siteOrigin(req)}/api/auth/google/callback`;
 }
 
+/** Everything one sign-in attempt needs to remember for its 10 minutes; `next` is where to land afterwards. */
 export function newFlow(next: string) {
   const verifier = randomToken(48);
   const challenge = createHash("sha256").update(verifier).digest("base64url");
@@ -38,6 +50,7 @@ export function newFlow(next: string) {
 }
 export type Flow = ReturnType<typeof newFlow>;
 
+/** The Google page to send the browser to. Asks only for identity (openid email profile), nothing in their Google account. */
 export function authorizeUrl(flow: Flow, redirectUri: string): string {
   const q = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
@@ -81,6 +94,9 @@ export async function verifiedProfile(code: string, verifier: string, redirectUr
   const { id_token } = (await res.json()) as { id_token?: string };
   if (!id_token) throw new Error("Google sent no ID token");
 
+  // An ID token is three base64url parts joined by dots: header.claims.signature. The middle part
+  // is JSON saying who signed in. Its signature isn't checked here because the token came directly
+  // from Google over HTTPS (see the note at the top); the claims below are still checked.
   const claims = JSON.parse(Buffer.from(id_token.split(".")[1], "base64url").toString("utf8")) as IdClaims;
   if (!["accounts.google.com", "https://accounts.google.com"].includes(claims.iss)) throw new Error("Wrong token issuer");
   if (claims.aud !== process.env.GOOGLE_CLIENT_ID) throw new Error("Token is for a different app");

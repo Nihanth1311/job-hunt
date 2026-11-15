@@ -1,5 +1,10 @@
 "use server";
 
+// "use server" makes every exported function here a server action: a screen calls it like an
+// ordinary function, and Next.js turns that call into a request to the server, runs the function
+// there and sends the result back. Each one starts with requireUser() (or requireAdmin()), because
+// anyone could send that request by hand: the sign-in check can't be left to the screen.
+
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { trackJob, unsaveJob as untrack } from "../services/applications";
@@ -10,6 +15,7 @@ import { findOnGoogleJobs } from "../fetching/sources/jsearch";
 import { replaceJobDescription, rescoreAll } from "../services/jobs";
 import { getJob } from "../services/queries";
 
+/** Tell Next.js that every page may show something different now, so the next view is re-read from the database. */
 const refreshAll = () => revalidatePath("/", "layout");
 
 async function setJobStatus(id: string, status: "new" | "skipped") {
@@ -79,7 +85,7 @@ export async function checkWithGoogleJobs(id: string): Promise<CheckResult> {
   if (quota && quota.remaining <= GOOGLE_JOBS_RESERVE) {
     return {
       ok: false,
-      message: `Only ${quota.remaining} Google Jobs searches left this month, kept for your daily search. Use Clip instead.`,
+      message: `Only ${quota.remaining} Google Jobs searches left this month, kept for your daily search. Paste the full description instead.`,
     };
   }
   const job = await getJob(uid, id);
@@ -89,9 +95,9 @@ export async function checkWithGoogleJobs(id: string): Promise<CheckResult> {
   try {
     found = await findOnGoogleJobs(uid, jsearchKey, job);
   } catch (e) {
-    return { ok: false, message: `Google Jobs didn't answer (${e instanceof Error ? e.message : e}). Try again, or use Clip.` };
+    return { ok: false, message: `Google Jobs didn't answer (${e instanceof Error ? e.message : e}). Try again, or paste the full description.` };
   }
-  if (!found) return { ok: false, message: "Google Jobs doesn't list this job. Open the posting and use Clip instead." };
+  if (!found) return { ok: false, message: "Google Jobs doesn't list this job. Open the posting and paste its full description instead." };
 
   const db = await getDb();
   await db

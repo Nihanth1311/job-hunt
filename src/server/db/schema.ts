@@ -1,3 +1,7 @@
+// Every table in the database, written as TypeScript. Drizzle uses this file twice: to build
+// type-checked queries in the app, and (through `npm run db:generate`) to write the SQL
+// migrations in ./drizzle whenever a table changes here.
+//
 // Not marked "server-only": drizzle-kit (the migration tool) reads this file outside Next.js.
 // The screens only ever see its types, through src/shared/types.ts.
 import { sql } from "drizzle-orm";
@@ -16,6 +20,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { AutofillReport } from "../../shared/autofill";
 
+/** A point in time, stored with its time zone and handed to the code as a JavaScript Date. */
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 /** Raw file bytes. PGlite hands back a Uint8Array and postgres-js a Buffer; both become a Buffer. */
 const bytea = customType<{ data: Buffer; driverData: Uint8Array }>({
@@ -99,10 +104,15 @@ export const rawJobs = pgTable(
 export const jobs = pgTable(
   "jobs",
   {
+    /** 20 hex characters: a SHA-1 of user + source + the source's own id (jobId in services/jobs.ts). */
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
+    /** "company|title|city" in normal form: the same job from two sources is kept once per person. */
     dedupeKey: text("dedupe_key").notNull(),
-    source: text("source").notNull(), // adzuna | jsearch | greenhouse | lever | ashby | manual
+    // Which reader found it: workday | amazon | google | oracle | eightfold | smartrecruiters |
+    // greenhouse | lever | ashby (company careers sites), jsearch (Google Jobs), manual (added by
+    // you), or adzuna (retired: old rows only, see RETIRED_SOURCES).
+    source: text("source").notNull(),
     publisher: text("publisher"), // e.g. "LinkedIn" when it came via Google Jobs
     title: text("title").notNull(),
     company: text("company").notNull(),
@@ -112,7 +122,10 @@ export const jobs = pgTable(
     /** The job on the employer's own careers site, when we know it (null = only the board's copy). */
     companyUrl: text("company_url"),
     description: text("description").notNull().default(""),
-    /** True when the source only gave us the start of the description (Adzuna: 500 characters). */
+    /**
+     * True when the source only gave us the start of the description. Only the retired Adzuna
+     * source set this (500 characters); it stays for those old rows and for restored backups.
+     */
     descriptionIsPreview: boolean("description_is_preview").notNull().default(false),
     postedAt: ts("posted_at"),
     firstSeenAt: ts("first_seen_at").notNull().defaultNow(),
@@ -123,8 +136,8 @@ export const jobs = pgTable(
     salaryBucket: text("salary_bucket").notNull().default("unknown"), // meets | possible | below | unknown
     mentionsCtc: boolean("mentions_ctc").notNull().default(false),
 
-    category: text("category").notNull().default("other"), // fullstack | frontend | backend | devops | sde | other
-    track: text("track").notNull().default("fullstack"), // resume track to use
+    category: text("category").notNull().default("other"), // fullstack | frontend | backend | devops | data | security | sde | internship | other
+    track: text("track").notNull().default("fullstack"), // which base resume to use: frontend | backend | fullstack | devops | data | security
     expMin: integer("exp_min"),
     expMax: integer("exp_max"),
     expFit: boolean("exp_fit").notNull().default(true),
@@ -216,7 +229,11 @@ export const resumeFiles = pgTable("resume_files", {
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
-/** Key/value store for each person's profile, preferences and state. user_id "" holds app-wide state. */
+/**
+ * Key/value store for each person's profile, preferences and state. user_id "" holds app-wide state.
+ * Keys: "profile", "preferences", "answers" (the autofill answers bank), and "state:<name>" for
+ * small facts such as state:lastAutoFetchAt, state:pushSubs or (app-wide) state:companyHealth.
+ */
 export const settings = pgTable(
   "settings",
   {
@@ -272,7 +289,7 @@ export const autofillRuns = pgTable(
       .notNull()
       .references(() => jobs.id, { onDelete: "cascade" }),
     resumeId: text("resume_id").references(() => resumeVersions.id, { onDelete: "set null" }),
-    /** queued | filling | needs_you | answered | review | submitted | error | cancelled */
+    /** queued | filling | waiting | needs_you | answered | review | submitted | error | cancelled (RUN_STATUSES in shared/autofill.ts) */
     status: text("status").notNull().default("queued"),
     applyUrl: text("apply_url").notNull(),
     /** What the helper last reported: fields it filled, questions it couldn't answer. */
@@ -286,6 +303,8 @@ export const autofillRuns = pgTable(
   (t) => [index("autofill_runs_user_idx").on(t.userId, t.status), index("autofill_runs_job_idx").on(t.jobId)],
 );
 
+// Row types worked out from the tables above: $inferSelect is a row as it's read, $inferInsert
+// what an insert accepts (columns with defaults become optional).
 export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
 export type Application = typeof applications.$inferSelect;

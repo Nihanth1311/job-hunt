@@ -9,6 +9,9 @@ import type { JobSource } from "./";
 // JSearch reads Google's job search, which lists LinkedIn, Naukri, Indeed, Glassdoor and
 // company-site postings. Free key via RapidAPI ("JSearch" by OpenWeb Ninja). The free plan
 // has a small monthly quota, so this source runs once a day with a few queries.
+// It's a third-party API called with each person's own key; the app itself never opens
+// LinkedIn or Naukri.
+/** One job as JSearch sends it. Only the fields this app reads are listed. */
 interface JSearchJobRaw {
     job_id: string;
     job_title: string;
@@ -105,7 +108,7 @@ async function search(
   const remaining = num("x-ratelimit-requests-remaining");
   const limit = num("x-ratelimit-requests-limit");
   if (!res.ok) {
-    const detail = (await res.text().catch(() => "")).match(/"message"s*:s*"([^"]{1,120})"/)?.[1];
+    const detail = (await res.text().catch(() => "")).match(/"message"\s*:\s*"([^"]{1,120})"/)?.[1];
     throw new Error(`${res.status} ${detail ?? res.statusText}`);
   }
   const body = (await res.json()) as JSearchResponse;
@@ -113,6 +116,7 @@ async function search(
   return { jobs: found.map(toRawJob), remaining, limit };
 }
 
+/** One JSearch job in the shape every source hands back (RawJob). Salary is kept only when it's in rupees (or no currency is given). */
 function toRawJob(r: JSearchJob): RawJob {
   const location = r.job_location || [r.job_city, r.job_state].filter(Boolean).join(", ") || r.job_country || "India";
   const inr = !r.job_salary_currency || r.job_salary_currency.toUpperCase() === "INR";
@@ -143,7 +147,8 @@ export const jsearch: JobSource = {
   label: "Google Jobs (JSearch) — LinkedIn, Naukri, Indeed…",
   scope: "user",
   configured: (prefs, secrets) => Boolean(secrets.jsearchKey) && prefs.jsearchQueriesPerDay > 0,
-  // Free plan: 200 requests a month. One run a day (5 searches) keeps it well inside that.
+  // Free plan: 200 requests a month. One run a day (5 searches by default) keeps it well inside that.
+  // "A day" is 20 hours here, so a run that happens a little earlier than yesterday's still counts.
   due: ({ lastRun }) => !lastRun || Date.now() - lastRun.getTime() > 20 * 60 * 60 * 1000,
   budgeted: true,
 
@@ -173,6 +178,7 @@ export const jsearch: JobSource = {
   },
 };
 
+/** A title's words in normal form (lowercase, no punctuation, no one-letter words), for comparing two titles. */
 const words = (s: string) => new Set(normKey(cleanTitle(s)).split(" ").filter((w) => w.length > 1));
 
 /** Same company, and titles that share most of their words. */
@@ -187,8 +193,8 @@ function sameJob(a: { title: string; company: string }, b: { title: string; comp
 }
 
 /**
- * Look one job up on Google Jobs (1 request) to get its full description, e.g. for an
- * Adzuna preview. Returns null when Google Jobs doesn't list it.
+ * Look one job up on Google Jobs (1 request) to get its full description, for a job whose
+ * source only gave a short preview (old Adzuna jobs). Returns null when Google Jobs doesn't list it.
  */
 export async function findOnGoogleJobs(userId: string, apiKey: string, job: { title: string; company: string }): Promise<RawJob | null> {
   const { jobs, remaining, limit } = await search(apiKey, `${cleanTitle(job.title)} ${job.company}`, "month", false);

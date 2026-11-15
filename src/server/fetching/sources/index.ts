@@ -32,6 +32,11 @@ export interface JobSource {
   fetch(ctx: SourceContext): Promise<RawJob[]>;
 }
 
+/**
+ * Every source, in the order a fetch runs them. `companies` is the only "shared" one (the
+ * built-in company list, read once for everyone); the rest run per person: Google Jobs with
+ * their own key, and any extra Greenhouse / Lever / Ashby boards they added in Settings.
+ */
 export const SOURCES: JobSource[] = [companies, jsearch, greenhouse, lever, ashby];
 
 /**

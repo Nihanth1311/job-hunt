@@ -2,7 +2,7 @@
 
 - **Render** runs the app from your GitHub repo (free web service).
 - **Neon** is the PostgreSQL database (free).
-- **GitHub Actions** wakes the app every 3 hours to fetch jobs (`.github/workflows/fetch.yml`), because Render's free server sleeps after 15 minutes without visitors. The first visit after a quiet spell takes 30-60 seconds.
+- **GitHub Actions** wakes the app every hour (`.github/workflows/fetch.yml`); the app then fetches for each person whose own period is up, because Render's free server sleeps after 15 minutes without visitors. The first visit after a quiet spell takes 30-60 seconds.
 
 Use personal accounts only.
 

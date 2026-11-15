@@ -23,27 +23,38 @@ import { cleanupRejected } from "../services/applications";
 //      their own profile.
 //   3. Their own sources (Google Jobs with their key, extra career pages) run with their keys.
 
+/** How old the shared pool may be when nobody's fetch period says otherwise (refreshPool's default). */
 const POOL_HOURS = 3;
 
 /**
- * Something checks the schedule every 10 minutes (the server's own timer, kept awake by
- * cron-job.org). Count a fetch as due up to one check early, so a 3-hour period means
- * 3 hours, not 3 hours plus up to 10 minutes of waiting for the next check.
+ * The pool counts as due this much before its age reaches the fetch period. Automatic fetches
+ * run at fixed clock times (shared/core/schedule.ts), and each refresh starts a few minutes after
+ * its slot begins (whenever a wake-up arrives). If this slot's wake-up comes a little sooner after
+ * the hour than the last one did, the pool is just under one period old; without this margin it
+ * would be skipped as "checked recently" and that fetch would bring nothing new.
  */
 export const EARLY_MS = 10 * 60_000;
 /** "Fetch now" refreshes the pool too, unless it was refreshed this recently. */
 const POOL_MIN_MINUTES = 20;
 
+// What's running right now, kept in the server's memory (on globalThis so a dev hot-reload
+// doesn't lose it). None of this is in the database: a restart simply forgets it, and
+// unfinishedFetches() below tells people whose "Fetch now" was cut off.
 const g = globalThis as unknown as {
+  /** The pool refresh in flight, shared by everyone who asks while it runs. */
   __jobHuntPool?: Promise<SourceResult[]>;
+  /** user id → their fetch in flight. */
   __jobHuntFetching?: Map<string, Promise<FetchSummary>>;
+  /** user id → the switch that cancels their fetch. */
   __jobHuntAbort?: Map<string, AbortController>;
+  /** user id → when their fetch started (ISO time). */
   __jobHuntStarted?: Map<string, string>;
 };
 g.__jobHuntFetching ??= new Map();
 g.__jobHuntAbort ??= new Map();
 g.__jobHuntStarted ??= new Map();
 
+/** For GET /api/fetch: is this person's fetch running (from memory), and how did their last "Fetch now" end (from the database)? */
 export async function fetchStatus(userId: string): Promise<FetchStatus> {
   return {
     running: g.__jobHuntFetching!.has(userId) ? (g.__jobHuntStarted!.get(userId) ?? null) : null,
@@ -61,7 +72,12 @@ export function startManualFetch(userId: string): string {
   return g.__jobHuntStarted!.get(userId)!;
 }
 
-/** Fetch for one person. Overlapping calls for the same person share one run. */
+/**
+ * Fetch for one person. Overlapping calls for the same person share one run.
+ * `force` marks a "Fetch now" (as opposed to the scheduler's automatic fetch): it refreshes the
+ * pool even when it isn't due, saves its outcome for the app to show, and doesn't move the
+ * automatic schedule.
+ */
 export function runFetch(userId: string, opts: { force?: boolean } = {}): Promise<FetchSummary> {
   const running = g.__jobHuntFetching!;
   let run = running.get(userId);
@@ -118,6 +134,7 @@ function unlessStopped<T>(work: Promise<T>, signal: AbortSignal): Promise<T | nu
 
 export const isFetching = (userId: string) => g.__jobHuntFetching!.has(userId);
 
+/** When this source last finished without an error for this person ("" = the shared pool), from the fetch_runs log. */
 async function lastSuccess(userId: string, source: string): Promise<Date | null> {
   const db = await getDb();
   const [row] = await db
@@ -148,8 +165,12 @@ async function logged(userId: string, source: JobSource, run: () => Promise<{ fe
 
 // ---------- 1. The shared pool ----------
 
-/** Refresh the shared pool if it's due (or, with `force`, unless it was just refreshed). One refresh at a time. */
-/** `maxAgeHours`: how old the pool may be for this fetch (the person's own fetch period). */
+/**
+ * Refresh the shared pool if it's due (or, with `force`, unless it was refreshed in the last
+ * POOL_MIN_MINUTES). One refresh at a time: callers that arrive while one is running get the
+ * same promise, and with it that run's result.
+ * `maxAgeHours`: how old the pool may be for this fetch (the person's own fetch period).
+ */
 export function refreshPool(force = false, maxAgeHours = POOL_HOURS): Promise<SourceResult[]> {
   g.__jobHuntPool ??= doRefreshPool(force, maxAgeHours).finally(() => {
     g.__jobHuntPool = undefined;
@@ -170,6 +191,7 @@ async function doRefreshPool(force: boolean, maxAgeHours: number): Promise<Sourc
     results.push(
       await logged(GLOBAL, source, async () => {
         const raw = await source.fetch({ userId: GLOBAL, secrets: {}, prefs: await getPreferences(GLOBAL), lastRun: last });
+        // Save to raw_jobs 100 at a time. The key is "<source>:<id>", so a job already in the pool is left as it is.
         for (let i = 0; i < raw.length; i += 100) {
           await db
             .insert(schema.rawJobs)
@@ -191,9 +213,9 @@ async function doRefreshPool(force: boolean, maxAgeHours: number): Promise<Sourc
   return results;
 }
 
-/** Copy pool jobs into one person's feed: companies they follow, not already in their feed, scored for them. */
 /**
- * Copy jobs from the shared pool into one person's feed. Reads only what that person can still be
+ * Copy jobs from the shared pool into one person's feed: companies they follow, not already in
+ * their feed, scored for them (toNewJob). Reads only what that person can still be
  * missing: jobs added to the pool since their last fill, from companies they follow. Reading the
  * whole pool every time (3,000+ jobs with descriptions, ~18 MB, for every person at every fetch)
  * used up Neon's 5 GB-a-month network allowance in about 9 days.
@@ -242,6 +264,11 @@ export async function fillFromPool(userId: string, opts: { companies?: string[] 
 
 // ---------- 2 & 3. One person's fetch ----------
 
+/**
+ * The fetch itself, in order: (1) the shared pool, then this person's share of it; (2) their own
+ * sources (Google Jobs with their key, extra career pages); (3) remember when it ran;
+ * (4) a Telegram alert for strong matches; (5) a phone notification. `signal` is the Cancel button.
+ */
 async function doFetch(userId: string, force: boolean, signal: AbortSignal): Promise<FetchSummary> {
   const [profile, prefs, secrets] = await Promise.all([getProfile(userId), getPreferences(userId), getSecrets(userId)]);
   const startedAt = new Date();
@@ -278,6 +305,8 @@ async function doFetch(userId: string, force: boolean, signal: AbortSignal): Pro
       continue;
     }
     const ctx = { userId, secrets, prefs, lastRun: await lastSuccess(userId, source.id) };
+    // A source with a `due` rule waits its turn on automatic fetches. "Fetch now" overrides that,
+    // except for sources on a hard quota (Google Jobs), which always wait.
     if ((!force || source.budgeted) && source.due && !source.due(ctx)) {
       results.push({ ...base, status: "skipped", message: "Already ran today (free-plan limit)" });
       continue;
@@ -354,6 +383,7 @@ function jobLine(j: Job): string {
   return `• <b>${escapeHtml(j.title)}</b> at ${escapeHtml(j.company)} (${j.score}%${salary ? `, ${salary}` : ""})${link}`;
 }
 
+/** One Telegram message listing up to 8 just-found jobs that are ready to apply and score at least `minScore` (0 = off). */
 async function instantAlerts(keys: TelegramKeys, jobs: Job[], minScore: number) {
   if (!minScore || !telegramConfigured(keys) || !(await telegramEnabled())) return;
   const hits = jobs
@@ -364,7 +394,7 @@ async function instantAlerts(keys: TelegramKeys, jobs: Job[], minScore: number) 
   await sendTelegram(keys, `🎯 <b>${hits.length} new job${hits.length > 1 ? "s" : ""} ready to apply</b>\n\n${hits.map(jobLine).join("\n")}`);
 }
 
-/** The 9 AM summary: new jobs per category, top matches, follow-ups due. */
+/** The morning summary on Telegram: new jobs per category, top matches, follow-ups due. */
 export async function sendMorningDigest(userId: string): Promise<void> {
   const db = await getDb();
   const keys = await getSecrets(userId);
@@ -402,6 +432,10 @@ export async function sendMorningDigest(userId: string): Promise<void> {
   await sendTelegram(keys, lines.filter(Boolean).join("\n"));
 }
 
+/**
+ * Send the digest once a day: on the first scheduler pass at or after 9 am India time. Whether
+ * today's has gone is remembered in state:digestDate (a yyyy-mm-dd date in India time).
+ */
 export async function maybeSendMorningDigest(userId: string): Promise<void> {
   const [prefs, keys] = await Promise.all([getPreferences(userId), getSecrets(userId)]);
   if (!prefs.morningDigest || !telegramConfigured(keys) || !(await telegramEnabled())) return;

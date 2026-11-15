@@ -1,5 +1,10 @@
 "use server";
 
+// "use server" makes every exported function here a server action: a screen calls it like an
+// ordinary function, and Next.js turns that call into a request to the server, runs the function
+// there and sends the result back. Each one starts with requireUser() (or requireAdmin()), because
+// anyone could send that request by hand: the sign-in check can't be left to the screen.
+
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -8,7 +13,9 @@ import { requireUser } from "../auth";
 import { getDb, schema } from "../db";
 import { APP_STATUSES, TRACKS, type AppStatus, type Track } from "@/shared/types";
 
+/** Tell Next.js that every page may show something different now, so the next view is re-read from the database. */
 const refreshAll = () => revalidatePath("/", "layout");
+// Values arriving from a form are checked against the allowed lists; anything else falls back to a safe default.
 const asStatus = (s: unknown): AppStatus => (APP_STATUSES.includes(s as AppStatus) ? (s as AppStatus) : "saved");
 const asTrack = (s: unknown): Track => (TRACKS.includes(s as Track) ? (s as Track) : "fullstack");
 

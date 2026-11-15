@@ -15,6 +15,11 @@ import { readWorkday } from "./workday";
 //   - the date is the company's own posting date, never "when we first saw it";
 //   - no date, or older than 30 days → left out;
 //   - only roles in India with a software / data / cloud / test title.
+//
+// How it's organised: registry.ts lists the companies and which hiring platform each one's
+// careers site runs on. Each platform has one "reader" (READERS below) that knows that
+// platform's public JSON addresses. So adding a company on a known platform is one line in the
+// registry; a new platform needs a new reader.
 
 /** Greenhouse, Lever and Ashby readers already exist for "Career pages"; reuse them with the registry's name. */
 const board =
@@ -38,12 +43,13 @@ const READERS: Record<Platform, Reader> = {
 export interface CompanyHealth {
   at: string;
   ok: boolean;
-  /** Recent India tech jobs this check returned that weren't in your feed yet. */
+  /** Recent India tech jobs this check returned that weren't in the shared pool yet. */
   added: number;
   error?: string;
 }
 export type HealthMap = Record<string, CompanyHealth>;
 
+/** Everyone follows every company unless they switched it off: only the "skipped" ids are stored. */
 export const followedCompanies = (prefs: Preferences): Company[] =>
   COMPANIES.filter((co) => !prefs.skippedCompanies.includes(co.id));
 
@@ -73,6 +79,8 @@ export const companies: JobSource = {
 
     const health = await getCompanyHealth();
     const at = new Date().toISOString();
+    // Six companies at a time. One company failing (site down, layout changed) never stops the
+    // others: inBatches collects each result as "fulfilled" or "rejected".
     const results = await inBatches(list, 6, async (company) => {
       const raw = await READERS[company.platform]({ company, known });
       return raw
@@ -80,6 +88,7 @@ export const companies: JobSource = {
         .map((j) => ({ ...j, companyId: company.id }));
     });
 
+    // Gather the jobs, and note how each company's check went (shown in Settings → Companies).
     const jobs: RawJob[] = [];
     results.forEach((r, i) => {
       const co = list[i];

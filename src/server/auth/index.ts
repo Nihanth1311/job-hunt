@@ -17,6 +17,7 @@ export { OWNER_ID } from "./owner";
 import { OWNER_ID } from "./owner";
 export const MAX_USERS = Number(process.env.MAX_USERS || 15);
 
+/** Cookies marked "HTTPS only" in production. INSECURE_COOKIES=1 turns that off for a production build tried over plain http. */
 export const secureCookies = () => process.env.NODE_ENV === "production" && process.env.INSECURE_COOKIES !== "1";
 
 /** Admins come from ADMIN_EMAIL (comma-separated). They can always sign in and manage invites. */
@@ -36,7 +37,11 @@ export const googleConfigured = () => Boolean(process.env.GOOGLE_CLIENT_ID && pr
 export const devLoginAllowed = (hostname: string) =>
   process.env.NODE_ENV !== "production" && !googleConfigured() && ["localhost", "127.0.0.1"].includes(hostname) && adminEmails().length > 0;
 
-/** The signed-in person for this request, or null. Cached per request. */
+/**
+ * The signed-in person for this request, or null. Cached per request (React's cache()): the
+ * layout, the page and its queries all ask, and the database is read once.
+ * The cookie's token is hashed and looked up in `sessions`, joined to `users`; expired rows don't match.
+ */
 export const getSessionUser = cache(async (): Promise<User | null> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -56,6 +61,7 @@ export const getSessionUser = cache(async (): Promise<User | null> => {
   return user;
 });
 
+/** "Last seen" is written at most this often per person. */
 const SEEN_EVERY_MS = 3 * 60_000;
 /** Used the app this recently → shown as "Active". */
 export const ACTIVE_WITHIN_MS = 10 * 60_000;
@@ -67,6 +73,7 @@ export async function requireUser(): Promise<User> {
   return user;
 }
 
+/** The signed-in admin, or off to the home page (or the login page when nobody is signed in). */
 export async function requireAdmin(): Promise<User> {
   const user = await requireUser();
   if (user.role !== "admin") redirect("/");
@@ -78,6 +85,8 @@ export async function startSession(userId: string): Promise<void> {
   const token = randomToken();
   const db = await getDb();
   await db.insert(schema.sessions).values({ id: sha256(token), userId, expiresAt: new Date(Date.now() + SESSION_DAYS * 86_400_000) });
+  // httpOnly: page scripts can't read the cookie. sameSite "lax": other sites can't make the
+  // browser send it with their own form posts or background requests.
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -87,6 +96,7 @@ export async function startSession(userId: string): Promise<void> {
   });
 }
 
+/** Sign out this browser: delete its session row and its cookie. */
 export async function endSession(): Promise<void> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
@@ -130,6 +140,8 @@ export async function signInVerified(profile: { email: string; name: string; ima
     if (count >= MAX_USERS) return { ok: false, reason: "full" };
   }
 
+  // A new account. The first admin gets the fixed id "owner" (the data from before accounts
+  // existed is stored under it); everyone else gets a random id.
   const [owner] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.id, OWNER_ID));
   const id = isAdmin && !owner ? OWNER_ID : crypto.randomUUID();
   const [user] = await db

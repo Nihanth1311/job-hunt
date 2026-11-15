@@ -5,6 +5,10 @@ import { getDb, schema } from "../db";
 import type { Application, Job } from "../db/schema";
 import { STATUS_LABEL, type AppStatus } from "@/shared/types";
 
+// The tracker: one `applications` row per job you're tracking, with a timeline of events. A
+// job's own status in the feed (new / saved / applied) is kept in step with it here.
+
+/** Marking something Applied sets a follow-up reminder this many days later. */
 const FOLLOW_UP_DAYS = 7;
 const inDays = (d: number) => new Date(Date.now() + d * 86_400_000);
 

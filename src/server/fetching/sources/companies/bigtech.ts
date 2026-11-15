@@ -3,6 +3,10 @@ import type { RawJob } from "@/shared/core/analyze";
 import { htmlToText } from "@/shared/core/text";
 import { getJson, getText, isRecent, pause, type Reader } from "./shared";
 
+// Amazon and Google run their own careers sites (no rented hiring platform), so each gets its
+// own reader. Amazon's search page has a JSON twin (search.json). Google has no JSON address:
+// its results page is HTML with the jobs embedded as data, which is read out of the page text.
+
 // ---------- Amazon (amazon.jobs) ----------
 
 interface AmazonJob {
@@ -67,6 +71,7 @@ const G = { id: 0, title: 1, responsibilities: 3, qualifications: 4, locations: 
 
 type GoogleJob = unknown[];
 
+/** The jobs array out of one results page: find each AF_initDataCallback({... data: [...] ...}) block and parse its data as JSON. */
 function googleJobs(html: string): GoogleJob[] {
   for (const m of html.matchAll(/AF_initDataCallback\(\{key: 'ds:\d+'[^]*?data:([^]*?), sideChannel/g)) {
     try {
@@ -79,6 +84,7 @@ function googleJobs(html: string): GoogleJob[] {
   return [];
 }
 
+/** Google's rich-text fields are [something, "<html>"] pairs: take the HTML and make it plain text. */
 const text = (v: unknown) => (Array.isArray(v) && typeof v[1] === "string" ? htmlToText(v[1]) : "");
 
 /** Early- and mid-career roles in India, newest first. */
@@ -95,6 +101,7 @@ export const readGoogle: Reader = async ({ company }) => {
     }
     let reachedOld = false;
     for (const j of list) {
+      // Three timestamp fields (seconds since 1970); the earliest is taken as the posting date.
       const stamps = G.dates.map((i) => (Array.isArray(j[i]) ? Number((j[i] as number[])[0]) : NaN)).filter(Number.isFinite);
       const postedAt = stamps.length ? new Date(Math.min(...stamps) * 1000) : null;
       if (!isRecent(postedAt)) {

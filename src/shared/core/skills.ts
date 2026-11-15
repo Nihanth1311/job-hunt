@@ -1,5 +1,9 @@
 import type { SkillGroup } from "../types";
 
+// The skills dictionary. Every skill the app knows has one standard name, a group, and the
+// spellings job descriptions use for it. Finding skills in a text is a word search against this
+// list (extractSkills); it's used on job postings, on your profile and on resumes alike.
+
 interface SkillDef {
   name: string;
   group: SkillGroup;
@@ -112,10 +116,13 @@ const DEFS: SkillDef[] = [
   { name: "Agile", group: "other", aliases: ["agile", "scrum", "jira"] },
 ];
 
+/** Make a spelling safe to put inside a regular expression ("c#", ".net", "ci/cd"). */
 function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 }
 
+// One pattern per skill, built once: any of its spellings, not glued to other letters or digits
+// (so "java" doesn't match inside "javascript").
 const COMPILED = DEFS.map((d) => ({
   ...d,
   re: new RegExp(`(?<![a-z0-9])(?:${d.aliases.map(escapeRe).join("|")})(?![a-z0-9])`, "i"),
@@ -129,6 +136,7 @@ export function extractSkills(text: string): string[] {
   return COMPILED.filter((d) => d.re.test(lower)).map((d) => d.name);
 }
 
+/** Which group a skill counts towards; "other" for one the dictionary doesn't know. */
 export function skillGroup(name: string): SkillGroup {
   return BY_NAME.get(name.toLowerCase())?.group ?? "other";
 }

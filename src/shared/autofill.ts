@@ -35,18 +35,16 @@ const applyUrlFor = (platform: AutofillPlatform, slug: string, id: string) => {
 };
 
 /**
- * The application form to open for a job, or null when autofill can't do that site yet.
- * Jobs read from a careers board carry "<platform>:<board>:<id>" at the end of their id, which
- * gives the form even when the posting lives on the company's own domain (stripe.com/jobs/…).
- * Workday postings are opened as they are (the helper presses Apply). Any other company site
- * works in guided mode. Job boards (LinkedIn, Naukri, Indeed…) never: their terms forbid it.
+ * The application form to open for a job, or null when autofill can't do that site.
+ * Decided from the job's links, company link first:
+ *   1. a Greenhouse, Lever or Ashby address → that board's own application form;
+ *   2. a Workday address → opened as it is (the helper presses Apply);
+ *   3. any other site that isn't a job board → guided mode;
+ *   4. only job-board links (LinkedIn, Naukri, Indeed…) → null: their terms forbid it.
+ * A board job whose posting lives on the company's own domain (stripe.com/jobs/…) falls under
+ * rule 3: the job row doesn't keep the board's name and id, so its form can't be worked out.
  */
-export function applyTarget(job: { id: string; url: string; companyUrl: string | null }): { platform: AutofillPlatform; url: string } | null {
-  const fromId = job.id.match(/(?:^|:)(greenhouse|lever|ashby):([^:]+):([^:]+)$/);
-  if (fromId) {
-    const platform = fromId[1] as AutofillPlatform;
-    return { platform, url: applyUrlFor(platform, fromId[2], fromId[3]) };
-  }
+export function applyTarget(job: { url: string; companyUrl: string | null }): { platform: AutofillPlatform; url: string } | null {
   const links = [job.companyUrl, job.url].filter((l): l is string => !!l && /^https?:\/\//i.test(l));
   for (const link of links) {
     const found = boardFromUrl(link);
@@ -66,6 +64,11 @@ const hostname = (link: string) => {
   }
 };
 
+/**
+ * A Greenhouse, Lever or Ashby posting address → its application form. The board name and job id
+ * are read from the path (boards.greenhouse.io/<board>/jobs/<id>, jobs.lever.co/<board>/<id>,
+ * jobs.ashbyhq.com/<board>/<id>) or, for Greenhouse's embedded form, from ?for=<board>&token=<id>.
+ */
 function boardFromUrl(link: string | null | undefined): { platform: AutofillPlatform; url: string } | null {
   if (!link) return null;
   let u: URL;
@@ -314,6 +317,7 @@ export function normQuestion(label: string, company = ""): string {
     .trim();
 }
 
+/** A rule's way of saying "leave this field empty on purpose" (as opposed to null: "I don't know, ask"). */
 export const SKIP = Symbol("skip");
 export type Answer = string | typeof SKIP | null;
 
@@ -452,8 +456,13 @@ export interface Decision {
 }
 
 /**
- * The answer for one question, before fitting it to the field's options.
- * Order: what you answered for this form, then what you taught it, then the built-in rules.
+ * The answer for one question, before fitting it to the field's options. Order:
+ *   1. what you answered for this form;
+ *   2. "happy to continue with your application?" → your Profile setting;
+ *   3. agreements and consent → never answered, handed to you;
+ *   4. what you taught it (an answer you ticked "remember" on, same or nearly the same wording);
+ *   5. the built-in RULES, first match wins.
+ * No match → value null, and the question is asked on the site.
  */
 export function decide(
   label: string,
@@ -467,7 +476,6 @@ export function decide(
   // A long question is mostly background: the rules look at its actual question (the sentence
   // ending in "?", else the last sentence), and only then at the whole text.
   const asks = questionParts(label).map((p) => normQuestion(p, ctx.company)).filter(Boolean);
-  const q = asks[0] ?? n;
   if (asks.some((a) => CONTINUE.test(a))) return { value: answerOf(ctx.bank.fields, "happyToContinue") || null, from: "bank" };
   if (asks.some((a) => AGREEMENT.test(a))) return { value: null, agreement: true };
   if (learned !== undefined) return { value: learned, from: "learned" };
@@ -524,6 +532,7 @@ export function similarity(a: string, b: string): number {
   return total ? (2 * both) / total : 0;
 }
 
+/** Lowercase, letters, digits and "+" only, single spaces: for comparing an answer with an option. */
 const simple = (s: string) =>
   s
     .toLowerCase()

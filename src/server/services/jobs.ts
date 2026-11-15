@@ -18,6 +18,11 @@ export function jobId(userId: string, source: string, externalId: string): strin
   return createHash("sha1").update(base).digest("hex").slice(0, 20);
 }
 
+/**
+ * A raw job from any source → a row for one person's feed: analysed against their profile and
+ * preferences (category, experience, salary, skills, score, fit verdict), with long text cut to
+ * safe lengths. The same raw job gives different rows for different people.
+ */
 export function toNewJob(userId: string, raw: RawJob, profile: Profile, prefs: Preferences): NewJob {
   const a = analyzeJob(raw, profile, prefs);
   return {
@@ -55,6 +60,7 @@ export function toNewJob(userId: string, raw: RawJob, profile: Profile, prefs: P
   };
 }
 
+/** Jobs posted longer ago than this are never added, and are cleaned out later unless you acted on them. */
 const MAX_AGE_DAYS = 30;
 
 /** When a job appeared: its posting date if the source gave one, else when we first saw it. */
@@ -65,7 +71,10 @@ export const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_0
 
 /**
  * Insert jobs we haven't seen before (by id or by company+title+city). Returns the new ones.
- * When a job we already have turns up again with a company-site link (e.g. found on Adzuna
+ * "Haven't seen" is decided by the database, not by a check here: the insert says ON CONFLICT DO
+ * NOTHING, and the table has a primary key on id and a unique index on (user, dedupe key), so a
+ * duplicate is silently skipped and only truly new rows come back.
+ * When a job we already have turns up again with a company-site link (e.g. found on Google Jobs
  * first, then on the company's careers page), the stored copy gets that link.
  */
 export async function insertJobs(userId: string, rows: NewJob[]): Promise<Job[]> {
@@ -91,8 +100,8 @@ export async function insertJobs(userId: string, rows: NewJob[]): Promise<Job[]>
       WHERE ${schema.jobs.userId} = ${userId} AND (${schema.jobs.dedupeKey} = v.key OR ${schema.jobs.id} = v.id) AND ${schema.jobs.companyUrl} IS NULL`);
   }
 
-  // Same job, but this source has the full description (e.g. Google Jobs or the company page
-  // for an Adzuna preview): swap it in, so the job can be checked properly.
+  // Same job, but this source has the full description and the stored copy is only a preview
+  // (old Adzuna jobs): swap it in, so the job can be checked properly.
   const full = fresh.filter((r) => !insertedKeys.has(r.dedupeKey) && !r.descriptionIsPreview && (r.description ?? "").length > 600);
   if (full.length) {
     const previews = await db
@@ -235,13 +244,14 @@ export async function rescoreAll(userId: string): Promise<number> {
  */
 const SCORING_VERSION = 4;
 
+/** Re-score this person's feed if the rules changed since it was last scored; otherwise one small read and done. */
 export async function ensureScored(userId: string): Promise<void> {
   if ((await getState<number>(userId, "scoringVersion")) === SCORING_VERSION) return;
   await rescoreAll(userId);
   await setState(userId, "scoringVersion", SCORING_VERSION);
 }
 
-/** Swap in the full description you pasted (e.g. for an Adzuna preview) and re-match on it. */
+/** Swap in a full description (pasted by you, found on Google Jobs, or from a backup) and re-match on it. */
 export async function replaceJobDescription(userId: string, id: string, description: string): Promise<void> {
   const db = await getDb();
   const [job] = await db.select().from(schema.jobs).where(and(eq(schema.jobs.id, id), eq(schema.jobs.userId, userId)));

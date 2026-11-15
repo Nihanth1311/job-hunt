@@ -45,6 +45,10 @@ interface Open {
   left: Page[];
 }
 
+/**
+ * The helper's main loop and everything it has open. One Helper per run of `npm run helper`:
+ * it owns one Chrome window (opened on the first form) and a tab per form in progress.
+ */
 class Helper {
   private ctx: BrowserContext | null = null;
   private open = new Map<string, Open>();
@@ -52,6 +56,11 @@ class Helper {
 
   constructor(private readonly site: Site) {}
 
+  /**
+   * The loop: look at the open forms, sleep, ask the site for work, repeat. It asks every 3 s
+   * while a form is open or something happened in the last 2 minutes, every 8 s otherwise, and
+   * returns (ending the program) after STOP_AFTER_MS with nothing to do.
+   */
   async run(first: { task: HelperTask | null; cancel: string[] }) {
     if (first.task) await this.handle(first.task);
     for (;;) {
@@ -74,6 +83,10 @@ class Helper {
     }
   }
 
+  /**
+   * The helper's Chrome, opened the first time it's needed. "Persistent context" means a real
+   * profile folder on disk (~/.jobhunt-helper/chrome): cookies and sign-ins stay between runs.
+   */
   private async browser(): Promise<BrowserContext> {
     if (this.ctx) return this.ctx;
     fs.mkdirSync(CHROME_DIR, { recursive: true });
@@ -238,6 +251,7 @@ class Helper {
     }
   }
 
+  /** Stop tracking a form and close its tabs. */
   private async forget(runId: string, why: string) {
     const o = this.open.get(runId);
     if (!o) return;
@@ -246,6 +260,7 @@ class Helper {
     for (const p of [o.page, ...o.left]) await p.close().catch(() => {});
   }
 
+  /** Save this run's resume PDF under ~/.jobhunt-helper/files/<run id>/ and return its path, for the form's file box. */
   private async download(task: HelperTask): Promise<string> {
     const dir = path.join(FILES_DIR, task.runId);
     fs.mkdirSync(dir, { recursive: true });
@@ -260,6 +275,7 @@ class Helper {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** The first 6,000 characters of text on the page ("" if the page can't be read right now). */
 const bodyText = (page: Page) => page.evaluate("document.body ? document.body.innerText.slice(0, 6000) : ''").catch(() => "") as Promise<string>;
 
 /** Where Google Chrome is installed. */
@@ -312,6 +328,7 @@ async function signIn(url: string) {
   console.log('Saved. Start the helper again with "npm run helper" and press Autofill; that site is already signed in.');
 }
 
+/** Reads the command (connect, signin, or none) and runs it. */
 async function main() {
   const [cmd, ...args] = process.argv.slice(2);
   if (cmd === "signin") {

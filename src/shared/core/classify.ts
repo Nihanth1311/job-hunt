@@ -1,8 +1,12 @@
 import type { Category, SalaryBucket, SkillGroup, Track } from "../types";
 import { extractSkills, skillGroup } from "./skills";
 
+// Reading a job posting's plain facts: what kind of role it is (category), which base resume
+// suits it (track), and what it pays. Regular expressions and counting, no AI model.
+
 // ---------- Category ----------
 
+/** Checked top to bottom against the title; the first pattern that matches names the category. */
 const TITLE_RULES: [Category, RegExp][] = [
   // DevSecOps stays DevOps; every other security title is Cybersecurity.
   ["security", /\b(cyber[\s-]?security|cyber|(?<!devsec)security (engineer|analyst|architect|consultant|specialist|researcher|operations|associate|administrator)|information security|infosec|appsec|application security|product security|cloud security|network security|soc analyst|soc engineer|penetration tester|pen[\s-]?tester|ethical hacker|red team|blue team|threat (intelligence|hunter|analyst)|incident response|vulnerability|malware|detection engineer|grc analyst|iam (engineer|analyst)|identity (and|&) access)\b/i],
@@ -25,6 +29,7 @@ const PRESALES_ENGINEER = /\b(sales|solutions?|pre-?sales|customer success|suppo
 // matches you to (Frontend, Backend, Full Stack, DevOps, Data Science, Cybersecurity).
 const OTHER_ENGINEERING = /\b(ios|android|swift|kotlin|flutter|xamarin|mobile (developer|engineer)|embedded|firmware|vlsi|sap|salesforce|mainframe)\b/i;
 
+/** A job's category: from its title when the title says, else from which group of skills the description leans on. */
 export function categorize(title: string, description: string): Category {
   if (NON_DEV_TITLE.test(title) && (!DEV_WORD.test(title) || PRESALES_ENGINEER.test(title))) return "other";
   if (OTHER_ENGINEERING.test(title) && !/\b(full[\s-]?stack|react native|backend|front[\s-]?end|devops)\b/i.test(title)) return "other";
@@ -43,6 +48,7 @@ export function categorize(title: string, description: string): Category {
   return "sde";
 }
 
+/** How many of these skills fall in each group (frontend, backend, devops, data, security, other). */
 function groupCounts(skills: string[]): Record<SkillGroup, number> {
   const c: Record<SkillGroup, number> = { frontend: 0, backend: 0, devops: 0, data: 0, security: 0, other: 0 };
   for (const s of skills) c[skillGroup(s)]++;
@@ -81,6 +87,7 @@ export interface Salary {
   max: number | null;
 }
 
+/** An optional currency mark before a number: ₹, Rs or INR. */
 const CUR = String.raw`(?:₹|(?<![a-z])rs\.?|(?<![a-z])inr)?\s*`;
 
 /** Pull a salary out of free text like "₹10-15 LPA", "12 Lacs P.A.", "INR 85,000/month". */
@@ -112,6 +119,7 @@ export function parseSalaryText(text: string): Salary | null {
   return null;
 }
 
+/** A salary range in LPA, or null when a figure is outside 1-300 LPA (then it wasn't a salary). */
 function range(min: number | null, max: number | null): Salary | null {
   const ok = (n: number | null) => n === null || (n >= 1 && n <= 300);
   if (!ok(min) || !ok(max)) return null;
@@ -128,6 +136,7 @@ export function amountToLpa(amount: number | null | undefined, period: string | 
   return lpa >= 1 && lpa <= 300 ? round1(lpa) : null;
 }
 
+/** Where a salary stands against your floor: "meets", "possible", "below" or "unknown". */
 export function salaryBucket(s: Salary | null, floor: number): SalaryBucket {
   if (!s || (s.min === null && s.max === null)) return "unknown";
   if (s.min !== null && s.min >= floor) return "meets";
@@ -136,6 +145,7 @@ export function salaryBucket(s: Salary | null, floor: number): SalaryBucket {
   return "below";
 }
 
+/** Does the posting talk about CTC or variable pay? (Then the headline figure may include bonuses.) */
 export function mentionsCtc(text: string): boolean {
   return /\b(ctc|variable pay|variable component|performance bonus|incentives?)\b/i.test(text);
 }

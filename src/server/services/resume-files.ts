@@ -57,6 +57,7 @@ async function texliveNet(code: string): Promise<Compiled> {
   throw new Error(`texlive.net ${res.status}`);
 }
 
+/** Did the compiler answer with a PDF (rather than an error page or a log)? */
 const isPdf = (res: Response) => res.ok && (res.headers.get("content-type") ?? "").includes("application/pdf");
 
 /** The useful part of a LaTeX log: the first "! ..." error and the line it happened on. */
@@ -88,6 +89,7 @@ export async function pdfText(pdf: Buffer): Promise<string> {
 /** upload: a PDF you uploaded. latex: your LaTeX, compiled. text: a text resume, laid out and compiled. */
 export type PdfSource = "upload" | "latex" | "text";
 
+/** Keep a resume's PDF (one per resume: saving again replaces it). */
 export async function saveResumeFile(uid: string, resumeId: string, file: { source: PdfSource; fileName: string; pdf: Buffer }) {
   const db = await getDb();
   await db
@@ -97,8 +99,9 @@ export async function saveResumeFile(uid: string, resumeId: string, file: { sour
 }
 
 /**
- * The PDF for one of your resumes: the stored one, or (for a LaTeX resume made before PDFs
- * were kept, or by Claude) compiled now and stored. null when it isn't yours or isn't LaTeX.
+ * The PDF for one of your resumes: the stored one, or compiled now and stored. LaTeX compiles as
+ * it is; a text (Markdown) resume is first laid out as LaTeX in the same style. null when the
+ * resume isn't yours or is empty; { error } when the compiler refused it or couldn't be reached.
  */
 export async function getResumePdf(uid: string, id: string): Promise<{ pdf: Buffer; fileName: string } | { error: string } | null> {
   const db = await getDb();

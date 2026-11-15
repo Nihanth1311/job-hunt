@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { CheckOnGoogle } from "./check-on-google";
 import { FullDescriptionForm } from "./full-description-form";
@@ -58,12 +57,6 @@ export function JobAbout({
                 for an accurate match and a properly tailored resume.
               </p>
               {googleQuota !== undefined && <CheckOnGoogle jobId={jobId} quotaLeft={googleQuota} className="mt-3" />}
-              <p className="mt-2 hidden text-xs md:block">
-                Or open the posting and click your <b className="text-ink">Clip to Job Hunt</b> bookmark.{" "}
-                <Link href="/settings#clip" className="font-medium text-accent hover:underline">
-                  Set it up
-                </Link>
-              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               {postingUrl && (

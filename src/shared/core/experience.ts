@@ -213,6 +213,7 @@ function quoteOf(sentence: string, start = 0, end = 0): string {
   return `${from > 0 ? "…" : ""}${q}${to < sentence.length ? "…" : ""}`;
 }
 
+/** Titles that mean a senior role; with no years stated anywhere, such a job is taken as 4+ years. */
 const SENIOR_TITLE = /\b(senior|sr\.?|lead|principal|staff|architect|manager|head|director|distinguished|fellow|vp|avp|svp|evp|vice president|chief|cto)\b/i;
 
 /** Experience from the title first ("Senior", "SDE II", "3-5 yrs"), then the description. */

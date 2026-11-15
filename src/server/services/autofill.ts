@@ -49,8 +49,11 @@ const SEEN_SAVE_MS = 10 * 60_000;
 /** The helper asks every few seconds; this long without a question means it's stopped. */
 const ONLINE_MS = 45_000;
 
+/** This run changed: the job page's next "anything new?" gets the new state. */
 const bump = (runId: string) => mem.versions.set(runId, (mem.versions.get(runId) ?? 0) + 1);
+/** There's work for this person's helper: its next poll reads the database instead of answering from memory. */
 const wake = (userId: string) => mem.pending.add(userId);
+/** Note a cancelled run for the helper to pick up (see takeCancelled). */
 const cancelled = (userId: string, runId: string) => {
   const set = mem.cancelled.get(userId) ?? new Set<string>();
   set.add(runId);
@@ -135,6 +138,7 @@ export const helperOnline = (userId: string) => Date.now() - (mem.seenAt.get(use
 
 // ---------- Runs, from the site ----------
 
+/** A run as the job page receives it: the database row plus its in-memory version number. */
 const view = (r: AutofillRun): AutofillRunView => ({
   id: r.id,
   status: r.status as RunStatus,
@@ -198,12 +202,14 @@ export async function queueRun(userId: string, jobId: string, resumeId: string):
   return { run: view(run) };
 }
 
+/** One of this person's runs, or null (also when it belongs to someone else). */
 async function ownRun(userId: string, runId: string): Promise<AutofillRun | null> {
   const db = await getDb();
   const [run] = await db.select().from(schema.autofillRuns).where(and(eq(schema.autofillRuns.id, runId), eq(schema.autofillRuns.userId, userId)));
   return run ?? null;
 }
 
+/** Change a run and bump its version, so the job page notices. */
 async function updateRun(runId: string, patch: Partial<Pick<AutofillRun, "status" | "message" | "report" | "answers">>): Promise<AutofillRun> {
   const db = await getDb();
   const [run] = await db
@@ -253,6 +259,7 @@ export async function answerRun(
   return view(updated);
 }
 
+/** "Cancel" on the job page: only for a run that's still going. */
 export async function cancelRun(userId: string, runId: string): Promise<void> {
   const run = await ownRun(userId, runId);
   if (!run || !(ACTIVE_RUN as string[]).includes(run.status)) return;
@@ -303,7 +310,8 @@ export async function nextTask(userId: string, force = false): Promise<HelperTas
     mem.pending.delete(userId);
     return null;
   }
-  // Claim it, unless it changed in the meantime (cancelled, or answered again).
+  // Claim it, unless it changed in the meantime (cancelled, or answered again). The UPDATE only
+  // matches while the status is still what we just read, so the check and the claim are one step.
   const [claimed] = await db
     .update(schema.autofillRuns)
     .set({ status: "filling", message: run.status === "queued" ? "Opening the form in Chrome…" : "Filling in your answers…", updatedAt: new Date() })

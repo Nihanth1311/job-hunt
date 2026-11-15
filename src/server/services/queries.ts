@@ -7,6 +7,11 @@ import { CAREER_SOURCES } from "@/shared/core/links";
 import { getPreferences } from "./settings";
 import { CATEGORIES, type Category, type JobListItem } from "@/shared/types";
 
+// Read-only database questions the pages ask: the Jobs list and its counts, the job page, the
+// tracker, resumes, the dashboard. Every query filters by the signed-in person's id (uid), which
+// is what keeps one person's data out of another's screens. Nothing here changes data.
+
+/** The "posted in the last…" choices on the Jobs page, in hours. */
 export const WINDOWS = { "24h": 24, "48h": 48, "7d": 168, "30d": 720 } as const;
 export type WindowKey = keyof typeof WINDOWS;
 
@@ -28,6 +33,7 @@ type Params = Record<string, string | string[] | undefined>;
 const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
   allowed.includes(v as T) ? (v as T) : fallback;
 
+/** The Jobs page's filters, read from the address bar (?w=7d&cat=backend…). Anything missing or not allowed falls back to the default. */
 export function parseFilters(sp: Params): JobFilters {
   return {
     window: pick(sp.w, Object.keys(WINDOWS) as WindowKey[], "48h"),
@@ -42,6 +48,7 @@ export function parseFilters(sp: Params): JobFilters {
   };
 }
 
+/** Cities that go by two names: a preference for one also matches jobs that use the other. */
 const CITY_SPELLINGS: Record<string, string[]> = {
   bengaluru: ["bengaluru", "bangalore"],
   bangalore: ["bengaluru", "bangalore"],
@@ -407,6 +414,7 @@ export async function recentFetchRuns(uid: string, limit = 15) {
     .limit(limit);
 }
 
+/** Everything the Today page shows: ready-to-apply counts by role type (24 h and 48 h), jobs worth a look, top matches, your applications. */
 export async function dashboardData(uid: string) {
   const db = await getDb();
   // "Ready to apply": the verdict already rules out senior, non-tech and underpaid roles.

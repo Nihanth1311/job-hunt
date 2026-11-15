@@ -68,6 +68,11 @@ export const ADDS_JS = String.raw`(() => {
   return out;
 })()`;
 
+/**
+ * The form reader. Walks every input, textarea, select and dropdown button on the page and returns
+ * one FormField per question. Written as a string because it runs inside the web page
+ * (page.evaluate), not in Node: the page can see the form's elements, the helper can't.
+ */
 export const SCAN_JS = String.raw`(() => {
   const clean = (s) => (s || "").replace(/\s+/g, " ").replace(/[\s*✱]+$/, "").trim();
   const txt = (el) => (el ? clean(el.innerText || el.textContent || "") : "");
@@ -330,7 +335,12 @@ export const SUBMITTED_URL = /\/(confirmation|thanks|thank-you|thank_you|submitt
 
 /**
  * Where a multi-page form is: the step it's on, whether it waits for a sign-in, and any error
- * messages showing. `fields` counts what's fillable on the page (0 = a page with nothing to fill).
+ * messages showing.
+ *   gate     a password or one-time-code box is showing: the helper waits for you
+ *   step     the name of the current step in Workday's progress bar ("" on other sites)
+ *   index    that step's position in the bar (-1 when there's no bar)
+ *   heading  the page's first visible heading, used when there's no step name
+ *   url      the address without ?query or #hash
  */
 export interface PageState {
   gate: boolean;
@@ -341,6 +351,7 @@ export interface PageState {
   errors: string[];
 }
 
+/** Reads a PageState off the page (runs inside the page, like SCAN_JS). */
 export const STATE_JS = String.raw`(() => {
   const vis = (e) => !!(e && (e.offsetWidth || e.offsetHeight || e.getClientRects().length));
   const txt = (e) => ((e && (e.innerText || e.textContent)) || "").replace(/\s+/g, " ").trim();

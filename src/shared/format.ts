@@ -1,5 +1,7 @@
+// Dates and times as the screens show them. Always India time, whatever time zone the server or the browser is in.
 const IST = "Asia/Kolkata";
 
+/** "just now", "12m ago", "5h ago", "3d ago"; a plain date once it's 30 days or more. */
 export function timeAgo(date: Date | string | null | undefined): string {
   if (!date) return "";
   const ms = Date.now() - new Date(date).getTime();
@@ -35,6 +37,7 @@ export function toDateInput(date: Date | string | null | undefined): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: IST }).format(new Date(date));
 }
 
+/** Is this date now or in the past? (Used for follow-ups that are due.) */
 export function isOverdue(date: Date | string | null | undefined): boolean {
   return Boolean(date) && new Date(date!).getTime() <= Date.now();
 }

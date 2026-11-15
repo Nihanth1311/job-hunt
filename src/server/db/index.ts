@@ -6,10 +6,16 @@ import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import type { Sql } from "postgres";
 import * as schema from "./schema";
 
+// The one door to the database. Everything else calls getDb() and gets a Drizzle object to run
+// queries with; nothing else knows (or cares) whether that is real PostgreSQL or the built-in
+// PGlite. The first call opens the connection and applies any new migrations from ./drizzle.
+
 export type DB = PgDatabase<PgQueryResultHKT, typeof schema>;
 
+/** The .sql files written by `npm run db:generate`; applied in order, each one only once. */
 const MIGRATIONS = path.join(process.cwd(), "drizzle");
 
+/** "data/pglite", put together at runtime so the bundler doesn't see a path to copy into the build. */
 function dataFolder(): string {
   return ["data", "pglite"].join(path.sep);
 }
@@ -46,6 +52,7 @@ async function openConnection(): Promise<Connection> {
  */
 function lockDataDir(dataDir: string) {
   const lock = `${dataDir}.lock`;
+  // Signal 0 sends nothing: it only asks "does this process exist?". EPERM = yes, but it isn't ours.
   const alive = (pid: number) => {
     try {
       process.kill(pid, 0);
@@ -55,6 +62,7 @@ function lockDataDir(dataDir: string) {
     }
   };
   try {
+    // "wx": create the file, and fail if it already exists (someone else may hold the lock).
     fs.writeFileSync(lock, String(process.pid), { flag: "wx" });
   } catch {
     const owner = Number(fs.readFileSync(lock, "utf8"));
@@ -82,6 +90,7 @@ function closeOnExit(client: PGlite) {
     client
       .close()
       .catch(() => undefined)
+      // Our handler replaced Node's default "exit on this signal"; send it again so the process really stops.
       .finally(() => process.kill(process.pid, signal));
   };
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, shutdown);
@@ -89,6 +98,9 @@ function closeOnExit(client: PGlite) {
 
 // The connection lives for the whole process (and survives dev hot-reloads);
 // migrations run one at a time, however many parts of the app ask at once.
+// Why globalThis: in development Next.js reloads this file after every edit, which would reset an
+// ordinary variable and open the database a second time. globalThis belongs to the process, so
+// what's kept there outlives the reload.
 const g = globalThis as unknown as {
   __jobHuntConn?: Promise<Connection>;
   __jobHuntMigrations?: Promise<unknown>;
@@ -126,6 +138,7 @@ async function init(): Promise<DB> {
     migrate = () => migrator.migrate(d, { migrationsFolder: MIGRATIONS });
   }
 
+  // Queue behind any migration run already in flight, then run ours (a no-op when nothing is new).
   const run = (g.__jobHuntMigrations ?? Promise.resolve()).catch(() => undefined).then(migrate);
   g.__jobHuntMigrations = run;
   await run;
@@ -136,6 +149,7 @@ async function init(): Promise<DB> {
 // the running app applies it without a restart (in dev, any edit to this file or the schema reloads it).
 let ready: Promise<DB> | undefined;
 
+/** The database, ready to query. Every caller shares one promise; a failed start is forgotten so the next call tries again. */
 export function getDb(): Promise<DB> {
   ready ??= init().catch((err) => {
     ready = undefined;

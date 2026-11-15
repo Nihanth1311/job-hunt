@@ -1,6 +1,6 @@
 # Job Hunt HQ
 
-A private, single-owner job search website. It finds fresh jobs in India, matches them to you, helps you tailor your resume with Claude, and tracks every application.
+A private, invite-only job search website for a small group. It finds fresh jobs in India, matches them to you, helps you tailor your resume with Claude, and tracks every application.
 
 - **Jobs:** new roles from the last 24 hours, 2 days, 7 days or 30 days, grouped into **Full Stack · Frontend · Backend · DevOps · SDE**. Each job is filtered by your salary floor (default ₹10 LPA) and your experience, then scored against your skills.
 - **Resume & Claude:** open a job or paste any job description. The site picks the right resume (a DevOps job gets your DevOps resume), builds a ready-made prompt, and **opens Claude** so you can chat and refine. Paste the final version back to keep it with the job and print it as a PDF.
@@ -124,8 +124,8 @@ src/
     core/                 Scoring, experience, skills, role types, prompts, LaTeX, schedule maths
     types.ts              Shared types, including what the server hands to the screens
   proxy.ts              First gate on every request (signed in?)
-helper/                 The autofill helper that runs on your laptop (npm run helper); talks to the site only via /api/helper
   instrumentation.ts    Starts the scheduler when the server starts
+helper/                 The autofill helper that runs on your laptop (npm run helper); talks to the site only via /api/helper
 drizzle/                Database migrations (applied automatically on start)
 ```
 

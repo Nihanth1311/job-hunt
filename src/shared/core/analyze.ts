@@ -16,6 +16,11 @@ import {
 import { canonicalize, extractSkills } from "./skills";
 import { normKey } from "./text";
 
+// The matching engine: one job + one person's profile and preferences → category, experience,
+// salary bucket, skills, a 0-100 score and a fit verdict. No AI model and no database: plain
+// rules, so the same code runs on the server (for every fetched job) and in the browser (while
+// you type a job in by hand), and always gives the same answer.
+
 /** What every source adapter hands back, before analysis. */
 export interface RawJob {
   source: string;
@@ -64,6 +69,7 @@ export interface Analysis {
   fit: Fit;
 }
 
+/** All the skills on a profile, every group together, under their standard names. */
 export function profileSkills(profile: Profile): string[] {
   return canonicalize([
     ...profile.skills.frontend,
@@ -165,6 +171,7 @@ function withSourceExperience(exp: Experience, months: number | null | undefined
 
 type ExpSource = "stated" | "title" | "source" | null;
 
+/** Titles that mean an entry-level role even when the posting never states years. */
 const JUNIOR_TITLE = /\b(junior|jr\.?|fresher|trainee|graduate|entry[\s-]level|associate|sde[\s-]?(1|i)|(engineer|developer)[\s-](1|i))\b/i;
 
 /**
@@ -230,6 +237,9 @@ export function judgeFit(x: {
   return { verdict: "fit", reasons: [...ok, "Full description checked"] };
 }
 
+// ---------- Location and duplicates ----------
+
+/** Old and new names of the same city, so "Bangalore" and "Bengaluru" count as one place. */
 const CITY_ALIASES: Record<string, string> = {
   bangalore: "bengaluru",
   gurgaon: "gurugram",
@@ -246,11 +256,13 @@ export function isIndiaLocation(location: string): boolean {
   return INDIA_RE.test(location);
 }
 
+/** The first place named in a location ("Bengaluru, Karnataka, India" → "bengaluru"), under its current name. */
 export function normCity(location: string): string {
   const first = location.toLowerCase().split(/[,/|(]/)[0].trim();
   return CITY_ALIASES[first] ?? first;
 }
 
+/** "company|title|city" in normal form. Two postings with the same key are treated as the same job, whichever source they came from. */
 export function dedupeKey(job: Pick<RawJob, "company" | "title" | "location">): string {
   return `${normKey(job.company)}|${normKey(job.title)}|${normKey(normCity(job.location))}`;
 }
