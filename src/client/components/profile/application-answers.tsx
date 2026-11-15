@@ -58,7 +58,7 @@ export function ApplicationAnswers({ bank, suggestions }: { bank: AnswerBank; su
             <h3 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">{group}</h3>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {ANSWER_FIELDS.filter((f) => f.group === group).map((f) => (
-                <div key={f.key}>
+                <div key={f.key} className={f.type === "lines" ? "sm:col-span-2 lg:col-span-3" : undefined}>
                   <label className="label" htmlFor={`ans-${f.key}`}>
                     {f.label}
                   </label>
@@ -74,6 +74,14 @@ export function ApplicationAnswers({ bank, suggestions }: { bank: AnswerBank; su
                         <option key={o}>{o}</option>
                       ))}
                     </select>
+                  ) : f.type === "lines" ? (
+                    <textarea
+                      id={`ans-${f.key}`}
+                      className="field min-h-20 font-mono text-xs"
+                      value={fields[f.key] ?? ""}
+                      placeholder={f.placeholder}
+                      onChange={(e) => setFields((x) => ({ ...x, [f.key]: e.target.value }))}
+                    />
                   ) : (
                     <input
                       id={`ans-${f.key}`}

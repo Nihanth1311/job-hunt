@@ -464,6 +464,38 @@ Achievements always last; every link a clickable `\href`.
 **Lesson:** "one source of truth" is per question: the latest facts live in one place, the
 wording for a role in another.
 
+### Caterpillar's sponsorship, relatives and citizenship questions
+**Problem:** Caterpillar asked three questions and the helper missed all of them:
+- "Are you related by blood or by marriage or do you have a close personal relationship…": no
+  rule recognised this wording.
+- "Citizenship Status": a two-level Workday list, India → "Citizen (India)". The helper answered
+  "Indian", which matches neither level.
+- Sponsorship: the rule already gave "No", but none of the options matched it. Options like
+  "I will not require…" didn't count as a "No".
+
+**Change:**
+- The relatives rule now also matches "related by blood/marriage" and "close personal relationship".
+- "Citizenship Status" is answered "Citizen (<your country>)". This picks the country first,
+  then the citizen choice inside it.
+- "No" now also matches options starting "I will not…", "I won't…", "Do not…" or "Never…".
+
+### Every job in Workday's Work Experience, links in Websites
+**Problem:** only Work Experience 1 came from your Profile. The rest came from Workday's resume
+reader, which got them half right: Genpact with no company and no To date, the Solytics
+internship with no To date. The Websites section was left at its Add button. The LinkedIn link
+also kept `?isSelfProfile=true` from the address bar.
+**Change:**
+- New Profile answer **Earlier jobs and internships**, one per line: `title | company | from | to (| city)`.
+- Each Work Experience entry is matched to one of your jobs (the current one, then these) by
+  company or start month, otherwise in order. Missing entries are added with Add. On the first
+  visit, what Workday guessed is replaced: title, company, dates, and "I currently work here".
+  The role description is left alone.
+- Websites gets one entry per link (LinkedIn, GitHub, portfolio), skipping links already there.
+- LinkedIn and GitHub links lose anything after `?` or `#`.
+
+**Lesson:** a site's resume reader is a first draft. Where your Profile knows better, correct it,
+but only on the first visit.
+
 ### Sites that won't let you sign in in the helper's Chrome
 **Problem:** some sign-in pages (Google and Microsoft accounts, some company sites such as
 Qualcomm's) refuse a browser that a program controls, so you couldn't sign in there at all.

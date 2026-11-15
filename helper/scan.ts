@@ -21,7 +21,7 @@ export interface FormField {
   buttons?: boolean;
   /** A file field that already holds a file. */
   hasFile?: boolean;
-  /** Inside a Workday repeating entry: "work" (work experience), "education", "languages", or "other" (skills, websites). */
+  /** Inside a Workday repeating entry: "work" (work experience), "education", "languages", "websites", or "other" (skills). */
   inSection?: EntryKind | "other";
   /** Date fields: the format a text box wants ("DD/MM/YYYY"), or the separate boxes Workday uses (m, d, y). */
   dateFormat?: string;
@@ -30,7 +30,7 @@ export interface FormField {
   prompt?: boolean;
 }
 
-export type EntryKind = "work" | "education" | "languages";
+export type EntryKind = "work" | "education" | "languages" | "websites";
 
 /**
  * Workday's "Add" buttons for Work Experience, Education and Languages (on My Experience, those
@@ -54,13 +54,13 @@ export const ADDS_JS = String.raw`(() => {
       const id = g.getAttribute("aria-labelledby");
       name = id + " " + txt(document.getElementById(id));
     }
-    if (!/work|education|language/i.test(name)) {
+    if (!/work|education|language|website/i.test(name)) {
       for (let p = b.parentElement; p && p !== document.body; p = p.parentElement) {
         const h = p.querySelector("h2, h3, h4, legend");
         if (h) { name = txt(h); break; }
       }
     }
-    const kind = /work/i.test(name) ? "work" : /education/i.test(name) ? "education" : /language/i.test(name) ? "languages" : "";
+    const kind = /work/i.test(name) ? "work" : /education/i.test(name) ? "education" : /language/i.test(name) ? "languages" : /website/i.test(name) ? "websites" : "";
     if (!kind || out.includes(kind)) continue;
     b.setAttribute("data-jh-add", kind);
     out.push(kind);
@@ -149,7 +149,7 @@ export const SCAN_JS = String.raw`(() => {
     // Inside a Workday entry (Work Experience 1, Education 1…): say which, and name the entry in the label.
     const section = type === "file" ? null : sectionOf(el);
     const sectionId = section ? section.getAttribute("aria-labelledby") || "" : "";
-    const sectionKind = !section ? "" : /work/i.test(sectionId) ? "work" : /education/i.test(sectionId) ? "education" : /language/i.test(sectionId) ? "languages" : "other";
+    const sectionKind = !section ? "" : /work/i.test(sectionId) ? "work" : /education/i.test(sectionId) ? "education" : /language/i.test(sectionId) ? "languages" : /website/i.test(sectionId) ? "websites" : "other";
     const panel = section ? panelOf(el) : "";
     const add = (o) => out.push(section ? { ...o, inSection: sectionKind, label: (panel ? panel + " › " : "") + o.label } : o);
 

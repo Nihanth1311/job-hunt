@@ -98,8 +98,8 @@ export interface AnswerField {
   options?: string[];
   /** The usual answer, used until you change it (shown pre-selected on the Profile page). */
   default?: string;
-  /** A date, kept as YYYY-MM-DD and written in whatever format each form wants. */
-  type?: "date";
+  /** "date": kept as YYYY-MM-DD and written in whatever format each form wants. "lines": a box with one entry per line. */
+  type?: "date" | "lines";
   hint?: string;
 }
 
@@ -140,6 +140,14 @@ export const ANSWER_FIELDS: AnswerField[] = [
   { key: "currentCompany", label: "Current company", group: "Work", hint: "Empty if you're not working now." },
   { key: "currentTitle", label: "Current job title", group: "Work" },
   { key: "currentSince", label: "Started current job (month and year)", group: "Work", placeholder: "Jul 2023" },
+  {
+    key: "pastJobs",
+    label: "Earlier jobs and internships",
+    group: "Work",
+    type: "lines",
+    placeholder: "Summer Intern | Genpact | May 2025 | Jun 2025",
+    hint: "One per line, newest first: title | company | from | to (| city). Workday's Work Experience gets these after your current job.",
+  },
   { key: "industry", label: "Industry you work in", group: "Work", placeholder: "Information Technology" },
   { key: "noticePeriod", label: "Notice period", group: "Work", placeholder: "Immediate, 30 days, 60 days…" },
   { key: "earliestStart", label: "Earliest start date", group: "Work", placeholder: "Immediately, or 1 March 2027" },
@@ -215,7 +223,9 @@ export function contactFromProfile(p: Profile): Contact {
     .split(/\s+/)
     .map((l) => l.trim())
     .filter(Boolean)
-    .map((l) => (/^https?:\/\//i.test(l) ? l : `https://${l}`));
+    .map((l) => (/^https?:\/\//i.test(l) ? l : `https://${l}`))
+    // A LinkedIn or GitHub profile needs no "?isSelfProfile=true" or other tracking bits.
+    .map((l) => (/(linkedin|github)\.com/i.test(l) ? l.replace(/[?#].*$/, "") : l));
   const linkedin = links.find((l) => /linkedin\.com/i.test(l)) ?? "";
   const github = links.find((l) => /github\.com/i.test(l)) ?? "";
   const portfolio = links.find((l) => l !== linkedin && l !== github) ?? "";
@@ -384,13 +394,19 @@ const RULES: Rule[] = [
   P(/\b18\b.{0,20}(years|older|age)|legal (working )?age|age of majority/, (c) => adult(answerOf(c.fields, "dob"))),
   B(/(previously|ever|before|formerly|in the past|prior).{0,40}(work|employ|consult|intern)|(work|employ|consult).{0,40}(before|previously|in the past)|former (employee|worker|intern)|ex employee|rehire/, "workedHereBefore"),
   B(/(previously|ever|already|before) appl(y|ied)|appl(y|ied) .{0,40}(before|previously|in the past|last \d+ months)/, "appliedBefore"),
-  B(/relative|family member|related to (any|an?) |spouse|immediate family|know (anyone|someone) .{0,20}work/, "relativesHere"),
+  B(/relative|family member|related to (any|an?) |related by (blood|marriage)|close personal relationship|spouse|immediate family|know (anyone|someone) .{0,20}work/, "relativesHere"),
   B(/non ?compete|non ?solicit|restrictive covenant|employment agreements?|post ?employment restriction|bound by/, "boundByAgreement"),
   B(/government (official|employee|entity)|public official|politically exposed|\bpep\b|public office|government owned/, "governmentOfficial"),
   B(/convicted|criminal|felony|pending (criminal )?charges/, "criminalRecord"),
   B(/background (check|verification|screening)|drug (test|screen)/, "backgroundCheck"),
   B(/\bshifts?\b|night shift|rotational/, "openToShifts"),
   P(/currently (employed|working)|are you (currently )?employed/, (c) => (answerOf(c.fields, "currentCompany") ? "Yes" : "No")),
+  // Workday's "Citizenship Status": the country first, then "Citizen (India)" inside it.
+  P(/citizenship status|citizen(ship)? type/, (c) => {
+    const nat = answerOf(c.fields, "nationality") ?? "";
+    const country = c.contact.country && (!nat || simple(nat).startsWith(simple(c.contact.country).slice(0, 4))) ? c.contact.country : nat;
+    return country ? `Citizen (${country})` : null;
+  }),
   B(/nationality|citizenship/, "nationality"),
   B(/\b10th\b|class (x|10)\b|\bssc\b|secondary school/, "tenth"),
   B(/\b12th\b|class (xii|12)\b|\bhsc\b|intermediate|higher secondary|pre university|\bpuc\b/, "twelfth"),
@@ -531,8 +547,8 @@ export function pickOption(answer: string, options: string[]): string | null {
   const no = /^(no|n|false)\b/.test(a);
   if (yes || no) {
     // "No" is also "I do not require…", "None", "Not applicable"; "Yes" is also "I do", "I am".
-    const NO_WORDS = /^(no|none|not|n a|i (do|am|have|would) not|i don t|i m not|i have no)\b/;
-    const YES_WORDS = /^(yes|i (do|am|have|require|would)|i m)\b/;
+    const NO_WORDS = /^(no|none|not|never|n a|i (do|am|have|would|will|shall|does) not|i (don|won|wouldn|haven) t|i m not|i have no|i neither|do not|does not|will not)\b/;
+    const YES_WORDS = /^(yes|i (do|am|have|require|would|will|need)|i m)\b/;
     const matches = opts.filter((o) => (yes ? YES_WORDS.test(simple(o)) && !NO_WORDS.test(simple(o)) : NO_WORDS.test(simple(o))));
     // Several kinds of yes ("Yes - I am a citizen", "Yes - I have a visa"): a citizen's answer first.
     return matches.find((o) => /citizen/i.test(o)) ?? matches[0] ?? null;

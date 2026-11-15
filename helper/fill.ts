@@ -3,7 +3,7 @@
 // answer, or mustn't (agreements), goes back to you on the site. It never presses Submit.
 
 import type { Page } from "playwright-core";
-import { answerOf, decide, pickOption, type AutofillQuestion, type AutofillReport, type Decision, type HelperTask } from "../src/shared/autofill";
+import { answerOf, decide, pickOption, type AutofillQuestion, type AutofillReport, type Contact, type Decision, type HelperTask } from "../src/shared/autofill";
 import { ADDS_JS, OPTIONS_JS, SCAN_JS, type EntryKind, type FormField } from "./scan";
 
 export interface FillResult {
@@ -94,9 +94,10 @@ export async function fillForm(page: Page, task: HelperTask, resumePath: string 
   for (let pass = 0; pass < 3; pass++) {
     const todo = fields.filter((f) => !done.has(f.id));
     if (!todo.length) break;
+    const plan = planEntries(fields, task);
     for (const f of todo) {
       done.add(f.id);
-      await fillField(page, f, ctx, filled, questions, notes, !!opts.firstVisit);
+      await fillField(page, f, ctx, filled, questions, notes, !!opts.firstVisit, plan);
     }
     await page.waitForTimeout(600);
     fields = await scan(page);
@@ -117,6 +118,7 @@ async function fillField(
   questions: AutofillQuestion[],
   notes: string[],
   replacePrefilled = false,
+  plan: EntryPlan = { work: new Map(), websites: new Map() },
 ) {
   const label = f.label || "(unlabelled question)";
   if (f.kind === "file") {
@@ -125,12 +127,13 @@ async function fillField(
       questions.push({ label: COVER.test(`${f.label} ${f.context}`) ? "Cover letter (attach it in Chrome)" : `${label} (attach it in Chrome)`, kind: "file", required: true, manual: true });
     return;
   }
-  if (f.value && !(replacePrefilled && REPLACEABLE.has(f.kind) && !f.prompt && !f.inSection)) return; // already answered: never overwrite
+  const correctable = replacePrefilled && ((REPLACEABLE.has(f.kind) && !f.prompt && !f.inSection) || jobFieldToCorrect(f, plan));
+  if (f.value && !correctable) return; // already answered: never overwrite
   let d: Decision;
   if (f.inSection) {
-    // Workday's Work Experience and Education entries: the first of each from your Profile;
-    // anything else still required is yours to fill in Chrome.
-    const v = entryAnswer(f, ctx.bank.fields, ctx.contact.city);
+    // Workday's entries: your jobs in Work Experience, your degree in Education 1, your languages
+    // and links; anything else still required is yours to fill in Chrome.
+    const v = entryAnswer(f, ctx.bank.fields, ctx.contact.city, plan);
     if (v === SKIP_ENTRY) return;
     if (v === null) {
       if (f.required) questions.push({ label: `${label} (fill in Chrome)`, kind: f.kind, required: true, manual: true });
@@ -149,6 +152,7 @@ async function fillField(
     // Pre-filled by the site: replace it only with an answer from your Profile that differs.
     if (d.value === null || d.value === "" || d.agreement || /decline|prefer not|don.?t wish/i.test(d.value)) return;
     if (pickOption(d.value, [f.value]) === f.value) return;
+    if (f.kind === "date" && dateDigits(f, d.value) === f.value) return;
   }
   if (d.agreement) {
     questions.push({ label, kind: f.kind, required: f.required, agreement: true });
@@ -182,9 +186,121 @@ const languagesOf = (fields: Record<string, string>) =>
     .filter(Boolean)
     .slice(0, 5);
 
-/** How many entries of each kind to have open: your current job, your degree, each language. */
-function entriesWanted(fields: Record<string, string>): Record<EntryKind, number> {
-  return { work: answerOf(fields, "currentCompany") ? 1 : 0, education: answerOf(fields, "college") ? 1 : 0, languages: languagesOf(fields).length };
+/** A job for Workday's Work Experience: your current one (Profile) and the earlier ones you listed. */
+export interface Job {
+  title: string;
+  company: string;
+  from: string;
+  to: string;
+  location: string;
+  current?: boolean;
+}
+
+/** "Summer Intern | Genpact | May 2025 | Jun 2025 | Hyderabad", one per line. */
+export function pastJobsOf(fields: Record<string, string>): Job[] {
+  return (answerOf(fields, "pastJobs") ?? "")
+    .split("\n")
+    .map((l) => l.split("|").map((p) => p.trim()))
+    .filter((p) => p.length >= 2 && (p[0] || p[1]))
+    .map(([title = "", company = "", from = "", to = "", location = ""]) => ({ title, company, from, to, location }))
+    .slice(0, 8);
+}
+
+function jobsOf(fields: Record<string, string>): Job[] {
+  const a = (k: string) => answerOf(fields, k) ?? "";
+  const now: Job[] = a("currentCompany") ? [{ title: a("currentTitle"), company: a("currentCompany"), from: a("currentSince"), to: "", location: "", current: true }] : [];
+  return [...now, ...pastJobsOf(fields)];
+}
+
+/** Your links for Workday's Websites section. */
+const linksOf = (c: Contact) => [c.linkedin, c.github, c.portfolio].filter(Boolean).map((l) => (/^https?:\/\//i.test(l) ? l : `https://${l}`));
+
+/** How many entries of each kind to have open: your jobs, your degree, each language, each link. */
+function entriesWanted(task: HelperTask): Record<EntryKind, number> {
+  const fields = task.bank.fields;
+  return { work: jobsOf(fields).length, education: answerOf(fields, "college") ? 1 : 0, languages: languagesOf(fields).length, websites: linksOf(task.contact).length };
+}
+
+/** Which job goes in which Work Experience entry, and which link in which Websites entry. */
+export interface EntryPlan {
+  work: Map<string, Job>;
+  websites: Map<string, string>;
+}
+
+const entryOf = (f: FormField) => f.label.split(" › ")[0];
+const fieldOf = (f: FormField) => (f.label.split(" › ").slice(1).join(" › ") || f.label).toLowerCase();
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** The digits a Workday date shows for this answer, in its boxes' order ("05" + "2025"). */
+function dateDigits(f: FormField, answer: string): string {
+  const iso = toIsoDate(answer);
+  if (!iso || !f.dateParts?.length) return "";
+  const [y, m, d] = iso.split("-");
+  return f.dateParts.map((p) => ({ m, d, y })[p]).join("");
+}
+
+/**
+ * Workday's resume reader fills Work Experience itself, often half right (no company, the wrong
+ * title). Match each entry to one of your jobs by its company or start month, else in order, so
+ * the right job's details go in (and, on the first visit, replace what Workday guessed).
+ */
+function planEntries(fields: FormField[], task: HelperTask): EntryPlan {
+  const plan: EntryPlan = { work: new Map(), websites: new Map() };
+  const entries = (kind: EntryKind) => [...new Set(fields.filter((f) => f.inSection === kind).map(entryOf))];
+  const inEntry = (e: string, kind: EntryKind) => fields.filter((f) => f.inSection === kind && entryOf(f) === e);
+
+  const jobs = jobsOf(task.bank.fields);
+  const free = new Set(jobs.map((_, i) => i));
+  const unmatched: string[] = [];
+  for (const e of entries("work")) {
+    const fs = inEntry(e, "work");
+    const company = norm(fs.find((f) => /company|employer|organi[sz]ation/.test(fieldOf(f)))?.value ?? "");
+    const title = norm(fs.find((f) => /job title|^title|position|role$/.test(fieldOf(f)))?.value ?? "");
+    const start = fs.find((f) => f.kind === "date" && /^from|start/.test(fieldOf(f)));
+    let best = -1;
+    let bestScore = 0;
+    for (const i of free) {
+      const j = jobs[i];
+      const c = norm(j.company);
+      let score = 0;
+      if (company && c && (company.includes(c) || c.includes(company))) score += 2;
+      if (start?.value && j.from && dateDigits(start, j.from) === start.value) score += 2;
+      if (title && norm(j.title) === title) score += 1;
+      if (score > bestScore) [best, bestScore] = [i, score];
+    }
+    if (best >= 0) {
+      plan.work.set(e, jobs[best]);
+      free.delete(best);
+    } else unmatched.push(e);
+  }
+  const left = [...free].sort((a, b) => a - b);
+  for (const e of unmatched) {
+    const i = left.shift();
+    if (i === undefined) break;
+    plan.work.set(e, jobs[i]);
+  }
+
+  // Websites: each link once, into the empty entries, skipping links already there.
+  const links = linksOf(task.contact);
+  const there = new Set(fields.filter((f) => f.inSection === "websites" && f.value).map((f) => norm(f.value.replace(/^https?:\/\/(www\.)?/i, ""))));
+  const todo = links.filter((l) => !there.has(norm(l.replace(/^https?:\/\/(www\.)?/i, ""))));
+  for (const e of entries("websites")) {
+    const url = inEntry(e, "websites").find((f) => f.kind === "text");
+    if (url && !url.value && todo.length) plan.websites.set(e, todo.shift()!);
+  }
+  return plan;
+}
+
+/** A field in a Work Experience entry whose pre-filled value may be replaced by your Profile's. */
+function jobFieldToCorrect(f: FormField, plan: EntryPlan): boolean {
+  if (f.inSection !== "work") return false;
+  const job = plan.work.get(entryOf(f));
+  if (!job) return false;
+  const field = fieldOf(f);
+  if (/description|responsibilit/.test(field)) return false;
+  if (/location|city/.test(field)) return !!job.location;
+  if (/^to\b|end/.test(field)) return !job.current && !!job.to;
+  return true;
 }
 
 /** The entries open now, by kind: "Work Experience 1", "Languages 2"… */
@@ -197,8 +313,8 @@ function entriesOpen(fields: FormField[], kind: EntryKind): number {
  * an "Add" button each. Press Add until the entries it can fill are open, then fill as usual.
  */
 async function openEntries(page: Page, task: HelperTask, fields: FormField[]): Promise<FormField[]> {
-  const wanted = entriesWanted(task.bank.fields);
-  for (const kind of ["work", "education", "languages"] as EntryKind[]) {
+  const wanted = entriesWanted(task);
+  for (const kind of ["work", "education", "languages", "websites"] as EntryKind[]) {
     for (let tries = 0; tries < wanted[kind] + 1 && entriesOpen(fields, kind) < wanted[kind]; tries++) {
       const adds = (await page.evaluate(ADDS_JS)) as EntryKind[];
       if (!adds.includes(kind)) break;
@@ -220,13 +336,19 @@ const REPLACEABLE = new Set<string>(["select", "radio", "combobox"]);
 const SKIP_ENTRY = "\u0000skip";
 
 /**
- * The answer for a field in a Workday entry, from Profile → Application answers: your current job
- * in Work Experience 1, your degree in Education 1. null when it isn't known (or it's a later entry).
+ * The answer for a field in a Workday entry, from Profile → Application answers: your jobs in Work
+ * Experience (see planEntries), your degree in Education 1, a language each, a link each. null when
+ * it isn't known.
  */
-function entryAnswer(f: FormField, fields: Record<string, string>, city: string): string | null {
-  const [entry, ...rest] = f.label.split(" › ");
-  const field = (rest.join(" › ") || entry).toLowerCase();
+function entryAnswer(f: FormField, fields: Record<string, string>, city: string, plan: EntryPlan): string | null {
+  const entry = entryOf(f);
+  const field = fieldOf(f);
   const first = /\b1$/.test(entry.trim());
+  if (f.inSection === "websites") {
+    const url = plan.websites.get(entry);
+    if (url && f.kind === "text") return url;
+    return null;
+  }
   if (f.inSection === "languages") {
     // Languages 1, 2…: one per language in your answers, marked fluent.
     const lang = languagesOf(fields)[Number(entry.match(/(\d+)\s*$/)?.[1] ?? 1) - 1];
@@ -237,14 +359,14 @@ function entryAnswer(f: FormField, fields: Record<string, string>, city: string)
     return null;
   }
   const a = (k: string) => answerOf(fields, k) || null;
-  if (f.inSection === "work" && first) {
-    const working = !!a("currentCompany");
-    if (/currently work/.test(field)) return working ? "Yes" : "No";
-    if (/job title|^title|position|role$/.test(field)) return a("currentTitle");
-    if (/company|employer|organi[sz]ation/.test(field)) return a("currentCompany");
-    if (/location|city/.test(field)) return city || null;
-    if (/^from|start/.test(field)) return a("currentSince");
-    if (/^to\b|end/.test(field)) return working ? SKIP_ENTRY : null;
+  const job = f.inSection === "work" ? plan.work.get(entry) : undefined;
+  if (job) {
+    if (/currently work/.test(field)) return job.current ? "Yes" : "No";
+    if (/job title|^title|position|role$/.test(field)) return job.title || null;
+    if (/company|employer|organi[sz]ation/.test(field)) return job.company || null;
+    if (/location|city/.test(field)) return job.location || (job.current ? city || null : SKIP_ENTRY);
+    if (/^from|start/.test(field)) return job.from || null;
+    if (/^to\b|end/.test(field)) return job.current ? SKIP_ENTRY : job.to || null;
     if (/description|responsibilit/.test(field)) return SKIP_ENTRY;
   }
   if (f.inSection === "education" && first) {
@@ -322,7 +444,13 @@ async function put(page: Page, f: FormField, answer: string, options: string[]):
           await clickChoice(page, f, 0);
           return "Ticked";
         }
-        return NO.test(answer.trim()) ? "Left unticked" : null;
+        if (!NO.test(answer.trim())) return null;
+        if (f.value) {
+          // Ticked by the site (Workday's "I currently work here" on an old job): untick it.
+          await clickChoice(page, f, 0);
+          return "Unticked";
+        }
+        return "Left unticked";
       }
       const wanted = answer
         .split(/[,;\n]/)
