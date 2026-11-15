@@ -52,6 +52,12 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
 
   const baseResumes: Partial<Record<Track, string>> = {};
   for (const [t, r] of Object.entries(bases)) baseResumes[t as Track] = r.content;
+  // Which base resume Claude starts from for each role type, and whether it has a PDF to attach.
+  const baseInfo: Partial<Record<Track, { id: string; label: string; pdf: boolean }>> = {};
+  for (const [t, r] of Object.entries(bases)) {
+    const row = usable.find((u) => u.id === r.id);
+    baseInfo[t as Track] = { id: r.id, label: r.label || `${TRACK_LABEL[t as Track] ?? t} base resume`, pdf: !!row?.hasFile || isLatex(r.content) };
+  }
 
   const exp = experienceLabel({ min: job.expMin, max: job.expMax });
   const source = sourceLabel(job);
@@ -178,6 +184,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
             profile={profile}
             prefs={prefs}
             baseResumes={baseResumes}
+            baseInfo={baseInfo}
             suggestedTrack={track}
             versions={versions.map((v) => ({ id: v.id, label: v.label, track: v.track, createdAt: v.createdAt, pdf: isLatex(v.content), score: scoreResume(job, v.content, profile, prefs) }))}
             isPreview={job.descriptionIsPreview}

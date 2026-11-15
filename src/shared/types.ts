@@ -96,6 +96,8 @@ export interface Profile {
   masterResume: string;
   /** Private context for Claude only. Never shown on any resume. */
   claudeNotes: string;
+  /** Facts every resume must get exactly right (roles and dates): they override any resume text. */
+  resumeFacts: string;
   /** Where the "Open Claude" buttons go: a Claude Project link or claude.ai/new. */
   claudeUrl: string;
 }
@@ -128,6 +130,7 @@ export const DEFAULT_PROFILE: Profile = {
   skills: { frontend: [], backend: [], devops: [], data: [], security: [], other: [] },
   masterResume: "",
   claudeNotes: "",
+  resumeFacts: "",
   claudeUrl: "https://claude.ai/new",
 };
 

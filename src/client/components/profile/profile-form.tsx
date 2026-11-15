@@ -134,6 +134,17 @@ export function ProfileForm({ profile }: { profile: Profile }) {
               placeholder="Context Claude should know but never put on a resume, e.g. which areas you're strongest in or still learning."
             />
           </div>
+          <div className="md:col-span-2">
+            <label className="label" htmlFor="facts">Facts every resume must get right</label>
+            <textarea
+              id="facts"
+              className="field min-h-24 font-mono sm:text-xs leading-relaxed"
+              value={p.resumeFacts}
+              onChange={set("resumeFacts")}
+              placeholder={"Your roles and dates, exactly as they should appear, e.g.\nAcme · Software Engineer · Aug 2026 – Present (current job)\nAcme · Software Engineer Intern · Feb 2026 – Aug 2026"}
+            />
+            <p className="mt-1 text-xs text-muted">Claude is told these beat anything in the resume it starts from, so an older resume can&apos;t bring back wrong dates.</p>
+          </div>
         </div>
       </Card>
 

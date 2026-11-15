@@ -61,11 +61,21 @@ function skillsBlock(job: JobInput, a: Analysis): string {
   return `Skills from the job that are already on my profile: ${have}\nSkills from the job that are NOT on my profile: ${gaps}\n\n`;
 }
 
-/** The master resume is the up-to-date source of truth; a base resume is only a fallback (it can be older). */
+/**
+ * The resume to start from: your base resume for this role type (the one you use on the site, an
+ * uploaded PDF's text included), else your master resume.
+ */
 function resumeBlock(track: Track, baseResume: string, masterResume: string): string {
+  if (baseResume.trim()) return `=== MY ${TRACK_LABEL[track].toUpperCase()} BASE RESUME (start from this one) ===\n${baseResume.trim()}`;
   if (masterResume.trim()) return `=== MY RESUME (complete and up to date) ===\n${masterResume.trim()}`;
-  if (baseResume.trim()) return `=== MY ${TRACK_LABEL[track].toUpperCase()} RESUME ===\n${baseResume.trim()}`;
   return "=== MY RESUME ===\n(I haven't added it yet. Ask me to paste it.)";
+}
+
+/** Facts the resume must get exactly right (titles, dates): they beat whatever the resume text says. */
+function factsBlock(p: Profile): string {
+  return p.resumeFacts?.trim()
+    ? `\n\n=== FACTS TO GET EXACTLY RIGHT (these override anything in my resume above, e.g. titles and dates) ===\n${p.resumeFacts.trim()}`
+    : "";
 }
 
 /** Everything the app knows about me, so Claude never has to ask. */
@@ -91,9 +101,9 @@ function aboutMeBlock(p: Profile): string {
 }
 
 /** Which of the job's skills I can honestly claim (on my resume, in my skills list or private notes). */
-function skillCoverage(p: Profile, a: Analysis) {
+function skillCoverage(p: Profile, a: Analysis, baseResume = "") {
   const mine = new Set(
-    [...canonicalize(Object.values(p.skills).flat()), ...extractSkills(`${p.masterResume}\n${p.claudeNotes}`)].map((s) => s.toLowerCase()),
+    [...canonicalize(Object.values(p.skills).flat()), ...extractSkills(`${p.masterResume}\n${baseResume}\n${p.claudeNotes}`)].map((s) => s.toLowerCase()),
   );
   return {
     have: a.skills.filter((s) => mine.has(s.toLowerCase())),
@@ -116,7 +126,7 @@ export function buildJobPrompt(
   const { job, analysis: a, track, baseResume, profile } = args;
   const role = TRACK_TITLE[track];
   const first = askForDescription(job);
-  const context = `${jobBlock(job, a)}\n\n${resumeBlock(track, baseResume, profile.masterResume)}${notesBlock(profile)}`;
+  const context = `${jobBlock(job, a)}\n\n${resumeBlock(track, baseResume, profile.masterResume)}${factsBlock(profile)}${notesBlock(profile)}`;
 
   switch (mode) {
     case "tailor":
@@ -175,9 +185,8 @@ ${NO_QUESTIONS}
 - Never invent employers, titles, dates or numbers.
 - Summary: 2-3 lines for ${role} roles, with my strongest result.
 - Show ownership, bias for action and delivering results through real examples, without buzzwords.
-- ONE page. 3-6 bullets per role, 2-3 per project; drop school marks and coursework first if space is tight. Keep my degree and CGPA.
-- Sections in this order: Summary, Technical Skills, Experience, Projects, Education, Achievements (only if space allows).
-- Dates as "Mon YYYY -- Mon YYYY" or "Mon YYYY -- Present".
+${PAGE_RULES}
+- 3-6 bullets per role, 2-3 per project; drop school marks and coursework first if space is tight. Keep my degree and CGPA.
 
 ${LATEX_RULES}
 
@@ -195,8 +204,14 @@ ${latexHeader(profile)}
 
 ${aboutMeBlock(profile)}
 
-${resumeBlock(track, "", profile.masterResume)}${notesBlock(profile)}`;
+${resumeBlock(track, "", profile.masterResume)}${factsBlock(profile)}${notesBlock(profile)}`;
 }
+
+/** Length, order, dates and links: the same for every resume Claude writes. */
+const PAGE_RULES = String.raw`- Exactly ONE page, never more. Keep it compact: tight wording, no empty lines, no filler. If it would spill onto a second page, cut the least relevant bullets; never shrink the font or margins.
+- Sections in this order: Summary, Technical Skills, Experience, Projects, Education, Achievements. Education is second last and Achievements is always the last section (keep it to my 2-4 strongest items).
+- Every title, company and date exactly as in "FACTS TO GET EXACTLY RIGHT" when that's given (it overrides the resume text), otherwise as in my resume. Dates as "Mon YYYY -- Mon YYYY" or "Mon YYYY -- Present". Within Experience, newest role first.
+- Every link is clickable: LinkedIn, GitHub, portfolio, project, demo and certificate links all as \href{full https:// URL}{short text}. Never a bare URL, never a link left as plain text. Use the exact links from the header and ABOUT ME; never invent one.`;
 
 const NO_QUESTIONS = `DO NOT ask me any questions and do not wait for input. Make every decision yourself and deliver the finished resume in this one reply. If something is unclear, missing or contradictory (a number, a title, a date, a city), use the information given here (my resume wins over anything else) and keep going.`;
 
@@ -220,7 +235,7 @@ function tailorPrompt(job: JobInput, a: Analysis, track: Track, baseResume: stri
   const role = TRACK_TITLE[track];
   const company = job.company || "the company";
   const title = job.title || role;
-  const { have, missing } = skillCoverage(p, a);
+  const { have, missing } = skillCoverage(p, a, baseResume);
   const facts = [
     job.title && `Title: ${job.title}`,
     job.company && `Company: ${job.company}`,
@@ -288,9 +303,8 @@ Put everything together: my complete tailored resume, with every fix from Steps 
 - Technical Skills: every skill, tool and technology the job asks for, in the job's exact wording and spelling, most important first. That includes skills not yet in my background (listed below as "to add"): I'm picking them up, so they go in Technical Skills (and the Summary if central to the role), into the new Experience bullets where they fit that role, and otherwise into my projects as above.
 - Summary: 2-3 lines that position me for this exact role at ${company} (for example, a strong frontend engineer with hands-on skills across the rest of this stack), leading with my strongest matching result and naming the job's core technologies.
 - Show ownership, bias for action and delivering results through real examples, without buzzwords.
-- ONE page. Cut or merge the least relevant bullets (3-6 per role, 2-3 per project); drop school marks and coursework first if space is tight. Keep my degree and CGPA.
-- Sections in this order: Summary, Technical Skills, Experience, Projects, Education, Achievements (only if space allows).
-- Dates as "Mon YYYY -- Mon YYYY" or "Mon YYYY -- Present".
+${PAGE_RULES}
+- Cut or merge the least relevant bullets to fit (3-6 per role, 2-3 per project); drop school marks and coursework first if space is tight. Keep my degree and CGPA.
 
 ${LATEX_RULES}
 
@@ -310,5 +324,5 @@ Skills from the job to add (I'm learning them): ${missing.join(", ") || "none de
 
 ${aboutMeBlock(p)}
 
-${resumeBlock(track, baseResume, p.masterResume)}${notesBlock(p)}`;
+${resumeBlock(track, baseResume, p.masterResume)}${factsBlock(p)}${notesBlock(p)}`;
 }

@@ -37,6 +37,7 @@ export function TailorResume({
   profile,
   prefs,
   baseResumes,
+  baseInfo,
   suggestedTrack,
   versions,
   isPreview,
@@ -47,6 +48,7 @@ export function TailorResume({
   profile: Profile;
   prefs: Preferences;
   baseResumes: Partial<Record<Track, string>>;
+  baseInfo: Partial<Record<Track, { id: string; label: string; pdf: boolean }>>;
   suggestedTrack: Track;
   versions: ResumeVersionItem[];
   isPreview: boolean;
@@ -61,6 +63,7 @@ export function TailorResume({
 
   const hasMaster = profile.masterResume.trim().length > 0;
   const base = baseResumes[track] ?? "";
+  const using = base.trim() ? baseInfo[track] : undefined;
   const canStart = Boolean(base || hasMaster);
   const analysis = useMemo(() => analyzeJob({ title: job.title, description: job.description }, profile, prefs), [job, profile, prefs]);
   const message = useMemo(
@@ -96,7 +99,7 @@ export function TailorResume({
           Tailor your resume for this job
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          One message gives Claude everything: this job, your full master resume, your skills, LinkedIn and GitHub. Claude screens
+          One message gives Claude everything: this job, your base resume for the role you pick, your skills, LinkedIn and GitHub. Claude screens
           you as {job.company || "the company"}&apos;s recruiter, rewrites your experience, and ends with a finished LaTeX resume. No
           questions, a minute or two.
         </p>
@@ -157,13 +160,34 @@ export function TailorResume({
             </Callout>
           )}
           {canStart && (
-            <p className="mt-3 text-xs text-muted">
-              Claude always works from your full{" "}
-              <Link href="/profile" className="font-medium text-accent hover:underline">
-                master resume
-              </Link>
-              , the most up-to-date version. Keep it current there.
-            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-surface-2 px-3.5 py-2.5 text-xs text-muted">
+              <Icon name="document" className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1">
+                Claude starts from{" "}
+                {using ? (
+                  <b className="text-ink">{using.label}</b>
+                ) : (
+                  <>
+                    your{" "}
+                    <Link href="/profile" className="font-medium text-accent hover:underline">
+                      master resume
+                    </Link>{" "}
+                    (you have no {TRACK_LABEL[track]} base resume yet)
+                  </>
+                )}
+                . Titles and dates follow{" "}
+                <Link href="/profile" className="font-medium text-accent hover:underline">
+                  Profile → Facts every resume must get right
+                </Link>
+                .
+              </span>
+              {using?.pdf && (
+                <span className="inline-flex items-center gap-1.5">
+                  <span>Attach the PDF too:</span>
+                  <DownloadButton id={using.id} />
+                </span>
+              )}
+            </div>
           )}
         </Step>
 
@@ -195,7 +219,8 @@ export function TailorResume({
           </div>
           <ol className="mb-4 space-y-1.5 text-sm text-muted">
             <Instruction n="a">
-              Click the button. We copy one complete message (this job + your master resume, skills and links) and open Claude.
+              Click the button. We copy one complete message (this job + {using ? using.label : "your master resume"}, skills and links) and
+              open Claude.{using?.pdf ? " If you downloaded the PDF above, drag it into Claude too." : ""}
             </Instruction>
             <Instruction n="b">
               In Claude, press <Kbd>Ctrl</Kbd> + <Kbd>V</Kbd> and then <Kbd>Enter</Kbd>.

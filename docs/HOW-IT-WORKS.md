@@ -451,6 +451,19 @@ race and ethnicity are now left empty unless you've given an answer (no more "pr
 say" chosen for you), and a question left empty on purpose that turns out required comes to you.
 **Lesson:** a stand-in page proves the logic, not the real page's quirks: copy the quirks in.
 
+### "Copy & open Claude" starts from the role's base resume
+**Problem:** every Claude message carried the master resume, whatever the role, so a DevOps
+application started from the same resume as a frontend one; and an older resume could bring
+wrong dates back.
+**Change** ([prompts.ts](../src/shared/core/prompts.ts)): the message starts from your base resume
+for the role you pick (an uploaded PDF's text included; the job page offers the PDF to attach),
+and the master resume only when that role has none. A new Profile box, "Facts every resume must
+get right", holds your exact titles and dates, and the prompt says they override the resume.
+Every resume Claude writes is now held to one page, compact; Education second last and
+Achievements always last; every link a clickable `\href`.
+**Lesson:** "one source of truth" is per question: the latest facts live in one place, the
+wording for a role in another.
+
 ### Resume names, every resume in one list, rejected jobs cleared
 **What:** resumes are named "role type · company · job title" ("FE · Stripe · Frontend Engineer",
 "BE · Base"); a one-off migration ([0009_rename_resumes.sql](../drizzle/0009_rename_resumes.sql))
