@@ -8,7 +8,8 @@
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { addEvent, createApplication, ownApplication, setApplicationStatus } from "../services/applications";
+import { addEvent, createApplication, MAX_NOTES, ownApplication, setApplicationStatus } from "../services/applications";
+import { safeHttpUrl } from "@/shared/core/links";
 import { requireUser } from "../auth";
 import { getDb, schema } from "../db";
 import { APP_STATUSES, TRACKS, type AppStatus, type Track } from "@/shared/types";
@@ -52,10 +53,10 @@ export async function updateApplicationDetails(
     .update(schema.applications)
     .set({
       // Dates from the form are days in India time; remind at 9 AM.
-      followUpAt: input.followUpAt ? new Date(`${input.followUpAt}T09:00:00+05:30`) : null,
-      notes: input.notes,
+      followUpAt: /^\d{4}-\d{2}-\d{2}$/.test(String(input.followUpAt ?? "")) ? new Date(`${input.followUpAt}T09:00:00+05:30`) : null,
+      notes: String(input.notes ?? "").slice(0, MAX_NOTES),
       track: asTrack(input.track),
-      url: input.url.trim(),
+      url: safeHttpUrl(input.url),
       updatedAt: new Date(),
     })
     .where(and(eq(schema.applications.id, id), eq(schema.applications.userId, uid)));

@@ -1,4 +1,5 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { callerOf, isBlocked, noteFailure } from "@/server/auth/rate-limit";
 import { after } from "next/server";
 import { tick } from "@/server/fetching/scheduler";
 
@@ -15,12 +16,22 @@ export const maxDuration = 300;
 function authorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
   const given = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (!secret || given.length !== secret.length) return false;
-  return timingSafeEqual(Buffer.from(given), Buffer.from(secret));
+  if (!secret || !given) return false;
+  // Compare SHA-256 digests: always 32 bytes each, so nothing about the secret's length shows
+  // and timingSafeEqual (which throws on unequal lengths) always gets equal ones.
+  const digest = (s: string) => createHash("sha256").update(s).digest();
+  return timingSafeEqual(digest(given), digest(secret));
 }
 
 async function handle(request: Request) {
-  if (!authorized(request)) return new Response("Unauthorized", { status: 401 });
+  // Ten wrong secrets in ten minutes from one caller: no more tries until the window ends.
+  const who = callerOf(request.headers);
+  const ok = authorized(request);
+  if (!ok) {
+    if (isBlocked("cron", who, 10)) return new Response("Too many attempts", { status: 429 });
+    noteFailure("cron", who, 10 * 60_000);
+    return new Response("Unauthorized", { status: 401 });
+  }
   // Who's calling (?from=github, ?from=cronjob), recorded so Settings shows which alarms arrive.
   const from = (new URL(request.url).searchParams.get("from") ?? "cron").replace(/[^a-z0-9-]/gi, "").slice(0, 20) || "cron";
   // Answer at once and fetch in the background: the server stays awake while it works, and the

@@ -20,6 +20,8 @@ import { getPreferences, getProfile } from "../services/settings";
 import { resumeName, TRACKS, type Track } from "@/shared/types";
 
 const refreshAll = () => revalidatePath("/", "layout");
+/** Longest resume text or LaTeX accepted (a full two-page LaTeX resume is about 10,000 characters). */
+const MAX_RESUME_CHARS = 200_000;
 const asTrack = (s: unknown): Track => (TRACKS.includes(s as Track) ? (s as Track) : "fullstack");
 
 /**
@@ -32,8 +34,9 @@ export async function saveBaseResume(
   opts: { anyway?: boolean } = {},
 ): Promise<{ id: string } | { error: string } | null> {
   const { id: uid } = await requireUser();
-  const text = content.trim();
+  const text = String(content ?? "").trim();
   if (!text) return null;
+  if (text.length > MAX_RESUME_CHARS) return { error: "That's too long to be a resume." };
   const compiled = isLatex(text) ? await compileLatex(text) : null;
   if (compiled && "error" in compiled && !opts.anyway) return { error: compiled.error };
 
@@ -53,7 +56,7 @@ export async function saveResumeVersion(input: {
   applicationId?: string | null;
 }): Promise<string | null> {
   const { id: uid } = await requireUser();
-  if (!input.content.trim()) return null;
+  if (typeof input?.content !== "string" || !input.content.trim() || input.content.length > MAX_RESUME_CHARS) return null;
   const db = await getDb();
   // Only link to this person's own job and tracker entry.
   const job = input.jobId ? await getJob(uid, input.jobId) : null;
@@ -71,7 +74,7 @@ export async function saveResumeVersion(input: {
     id,
     userId: uid,
     track: asTrack(input.track),
-    label: resumeName(asTrack(input.track), job, input.label.trim() || "Tailored"),
+    label: resumeName(asTrack(input.track), job, String(input.label ?? "").trim().slice(0, 80) || "Tailored"),
     content: input.content.trim(),
     jobId,
     applicationId,
@@ -101,7 +104,9 @@ export async function addManualJob(input: {
   description: string;
 }): Promise<{ jobId: string; applicationId: string } | { error: string }> {
   const { id: uid } = await requireUser();
-  if (!input.title.trim() || !input.company.trim()) return { error: "Add at least a job title and company." };
+  const field = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  input = { title: field(input?.title, 300), company: field(input?.company, 200), location: field(input?.location, 300), url: field(input?.url, 2000), description: field(input?.description, 20_000) };
+  if (!input.title || !input.company) return { error: "Add at least a job title and company." };
   const [profile, prefs] = await Promise.all([getProfile(uid), getPreferences(uid)]);
   const row = toNewJob(
     uid,

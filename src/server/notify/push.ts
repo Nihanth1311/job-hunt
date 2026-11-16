@@ -19,6 +19,23 @@ export interface PushSub {
 
 const MAX_DEVICES = 10;
 
+/**
+ * The push services browsers use (Chrome and Android, Safari and iPhone, Firefox, Edge). A
+ * subscription's address is supplied by the browser, so by anyone who calls the action by hand;
+ * the server POSTs to it and shows part of the answer in Settings. Without this list that would
+ * let a signed-in person make the server call any https address and read the reply.
+ */
+const PUSH_HOSTS = /(^|\.)(fcm\.googleapis\.com|push\.apple\.com|push\.services\.mozilla\.com|notify\.windows\.com)$/;
+
+export function isPushEndpoint(endpoint: string): boolean {
+  try {
+    const u = new URL(endpoint);
+    return u.protocol === "https:" && !u.username && !u.password && (u.port === "" || u.port === "443") && PUSH_HOSTS.test(u.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 // ---------- Keys ----------
 
 async function vapidKeys(): Promise<{ publicKey: string; privateKey: string }> {
@@ -88,7 +105,8 @@ function pushUrgency(): "very-low" | "low" | "normal" | "high" {
 
 /** Send to every device this person turned notifications on for. Returns how many got it. */
 export async function sendPush(userId: string, msg: PushMessage): Promise<number> {
-  const subs = await getPushSubs(userId);
+  // Addresses saved before the check existed are checked here too.
+  const subs = (await getPushSubs(userId)).filter((s) => isPushEndpoint(s.endpoint));
   if (!subs.length) return 0;
   const keys = await vapidKeys();
   const options = {
@@ -108,7 +126,8 @@ export async function sendPush(userId: string, msg: PushMessage): Promise<number
         // 404/410: the device unsubscribed or the app was removed from the Home Screen.
         if (e instanceof WebPushError && (e.statusCode === 404 || e.statusCode === 410)) gone.push(s.endpoint);
         else {
-          const why = e instanceof WebPushError ? `${e.statusCode} ${e.body}`.trim() : String(e);
+          // The status only: the service's reply text isn't shown back to the person.
+          const why = e instanceof WebPushError ? `the push service answered ${e.statusCode}` : "couldn't reach the push service";
           problems.push(`${s.device}: ${why}`.slice(0, 200));
           console.error("[push]", userId, why);
         }

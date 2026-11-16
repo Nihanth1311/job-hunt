@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { invite, removePerson } from "../services/accounts";
 import { requireAdmin, requireUser } from "../auth";
 import { fillFromPool, sendMorningDigest } from "../fetching/fetcher";
+import { COMPANY_BY_ID } from "../fetching/sources/companies/registry";
 import { rescoreAll } from "../services/jobs";
 import { sendTelegram } from "../notify/telegram";
 import { getPreferences, getSecrets, savePreferences, saveProfile, SECRET_NAMES, setSecret, setTelegramEnabled, telegramEnabled, type SecretName } from "../services/settings";
@@ -37,6 +38,8 @@ export async function setCompaniesFollowed(ids: string[], follow: boolean) {
   const { id: uid } = await requireUser();
   const prefs = await getPreferences(uid);
   const skipped = new Set(prefs.skippedCompanies);
+  // Only ids of companies that exist in the built-in list.
+  ids = (Array.isArray(ids) ? ids : []).filter((id) => typeof id === "string" && COMPANY_BY_ID.has(id));
   for (const id of ids) {
     if (follow) skipped.delete(id);
     else skipped.add(id);
@@ -52,7 +55,12 @@ export async function setCompaniesFollowed(ids: string[], follow: boolean) {
 export async function saveApiKeys(changes: Partial<Record<SecretName, string>>): Promise<string> {
   const { id: uid } = await requireUser();
   for (const [name, value] of Object.entries(changes)) {
-    if ((SECRET_NAMES as readonly string[]).includes(name) && typeof value === "string") await setSecret(uid, name as SecretName, value);
+    if (!(SECRET_NAMES as readonly string[]).includes(name) || typeof value !== "string") continue;
+    try {
+      await setSecret(uid, name as SecretName, value);
+    } catch {
+      return `That ${name === "jsearchKey" ? "Google Jobs key" : name === "telegramBotToken" ? "Telegram bot token" : "Telegram chat id"} doesn't look right. Copy it again and check for stray spaces.`;
+    }
   }
   refreshAll();
   return "Saved.";

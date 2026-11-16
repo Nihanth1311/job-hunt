@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, lt } from "drizzle-orm";
 import { getDb, schema } from "../db";
 import type { Application, Job } from "../db/schema";
+import { safeHttpUrl } from "@/shared/core/links";
 import { STATUS_LABEL, type AppStatus } from "@/shared/types";
 
 // The tracker: one `applications` row per job you're tracking, with a timeline of events. A
@@ -10,6 +11,8 @@ import { STATUS_LABEL, type AppStatus } from "@/shared/types";
 
 /** Marking something Applied sets a follow-up reminder this many days later. */
 const FOLLOW_UP_DAYS = 7;
+/** Longest notes kept on one application. */
+export const MAX_NOTES = 20_000;
 const inDays = (d: number) => new Date(Date.now() + d * 86_400_000);
 
 /** How long a rejected application stays in the tracker before it's deleted for good. */
@@ -23,14 +26,17 @@ export const REJECTED_KEEP_MS = 24 * 3_600_000;
 export async function cleanupRejected(): Promise<number> {
   const db = await getDb();
   const old = await db
-    .select({ id: schema.applications.id, jobId: schema.applications.jobId })
+    .select({ id: schema.applications.id, jobId: schema.applications.jobId, userId: schema.applications.userId })
     .from(schema.applications)
     .where(and(eq(schema.applications.status, "rejected"), lt(schema.applications.updatedAt, new Date(Date.now() - REJECTED_KEEP_MS))));
   if (!old.length) return 0;
   // Timeline entries go with the application (ON DELETE CASCADE); autofill runs go with the job.
   await db.delete(schema.applications).where(inArray(schema.applications.id, old.map((a) => a.id)));
-  const jobIds = old.map((a) => a.jobId).filter((id): id is string => !!id);
-  if (jobIds.length) await db.delete(schema.jobs).where(inArray(schema.jobs.id, jobIds));
+  // Only ever the application owner's own job: a tracker entry that points at someone else's
+  // job (possible through a crafted import file) must not delete it.
+  for (const a of old) {
+    if (a.jobId) await db.delete(schema.jobs).where(and(eq(schema.jobs.id, a.jobId), eq(schema.jobs.userId, a.userId)));
+  }
   return old.length;
 }
 
@@ -41,7 +47,7 @@ function jobStatusFor(status: AppStatus): "saved" | "applied" {
 
 export async function addEvent(applicationId: string, type: "created" | "status" | "note", message: string) {
   const db = await getDb();
-  await db.insert(schema.applicationEvents).values({ id: randomUUID(), applicationId, type, message });
+  await db.insert(schema.applicationEvents).values({ id: randomUUID(), applicationId, type, message: message.slice(0, 4000) });
 }
 
 export async function createApplication(userId: string, input: {
@@ -61,12 +67,12 @@ export async function createApplication(userId: string, input: {
       id: randomUUID(),
       userId,
       jobId: input.jobId ?? null,
-      company: input.company,
-      title: input.title,
-      url: input.url ?? "",
+      company: input.company.slice(0, 200),
+      title: input.title.slice(0, 300),
+      url: safeHttpUrl(input.url),
       track: input.track,
       status: input.status,
-      notes: input.notes ?? "",
+      notes: (input.notes ?? "").slice(0, MAX_NOTES),
       appliedAt: applied ? new Date() : null,
       followUpAt: input.status === "applied" ? inDays(FOLLOW_UP_DAYS) : null,
     })

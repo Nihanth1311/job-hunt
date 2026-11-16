@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { and, eq, inArray, lt, notExists, sql } from "drizzle-orm";
 import { analyzeJob, dedupeKey, type RawJob } from "@/shared/core/analyze";
+import { safeHttpUrl } from "@/shared/core/links";
 import { cleanTitle, normalizeChars } from "@/shared/core/text";
 import { getDb, schema } from "../db";
 import type { Job, NewJob } from "../db/schema";
@@ -35,8 +36,9 @@ export function toNewJob(userId: string, raw: RawJob, profile: Profile, prefs: P
     company: raw.company.slice(0, 200),
     location: raw.location.slice(0, 300),
     isRemote: Boolean(raw.isRemote),
-    url: raw.url,
-    companyUrl: raw.companyUrl || null,
+    // Links come from other sites and from people: only http(s) addresses are kept.
+    url: safeHttpUrl(raw.url),
+    companyUrl: safeHttpUrl(raw.companyUrl) || null,
     description: normalizeChars(raw.description).slice(0, 20_000),
     descriptionIsPreview: Boolean(raw.descriptionIsPreview),
     postedAt: raw.postedAt && !Number.isNaN(raw.postedAt.getTime()) ? raw.postedAt : null,

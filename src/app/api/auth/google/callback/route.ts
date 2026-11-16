@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { signInVerified, startSession } from "@/server/auth";
 import { unseal } from "@/server/auth/crypto";
-import { callbackUrl, OAUTH_COOKIE, siteUrl, verifiedProfile, type Flow } from "@/server/auth/google";
+import { callbackUrl, OAUTH_COOKIE, safeNext, siteUrl, verifiedProfile, type Flow } from "@/server/auth/google";
 import { onFirstSignIn } from "@/server/services/accounts";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
   await onFirstSignIn(result.user);
   await startSession(result.user.id);
-  const res = NextResponse.redirect(siteUrl(req, flow.next));
+  const res = NextResponse.redirect(siteUrl(req, safeNext(flow.next)));
   res.cookies.delete(OAUTH_COOKIE);
   return res;
 }

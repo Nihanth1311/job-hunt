@@ -8,7 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "../auth";
 import type { PushMode } from "@/shared/types";
-import { addPushSub, removePushSub, sendPush, setPushMode } from "../notify/push";
+import { addPushSub, isPushEndpoint, removePushSub, sendPush, setPushMode } from "../notify/push";
 
 const isText = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
 
@@ -16,7 +16,7 @@ const isText = (v: unknown, max: number): v is string => typeof v === "string" &
 export async function subscribePush(sub: { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } }, device: string) {
   const { id: uid } = await requireUser();
   const { endpoint, keys } = sub ?? {};
-  if (!isText(endpoint, 1000) || !endpoint.startsWith("https://") || !isText(keys?.p256dh, 200) || !isText(keys?.auth, 100)) {
+  if (!isText(endpoint, 1000) || !isPushEndpoint(endpoint) || !isText(keys?.p256dh, 200) || !isText(keys?.auth, 100)) {
     return { ok: false };
   }
   await addPushSub(uid, { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth }, device: String(device).slice(0, 60) });

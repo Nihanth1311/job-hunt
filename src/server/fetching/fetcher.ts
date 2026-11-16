@@ -15,6 +15,7 @@ import { followedCompanies } from "./sources/companies";
 import { MAX_AGE_DAYS } from "./sources/companies/shared";
 import { CATEGORY_LABEL, type Category } from "@/shared/types";
 import { cleanupRejected } from "../services/applications";
+import { deleteExpiredSessions } from "../auth";
 
 // How fetching works with several people:
 //   1. Company careers sites ("shared" sources) are read once for everyone into a pool (raw_jobs),
@@ -368,6 +369,7 @@ export async function allUserIds(): Promise<string[]> {
 /** Old jobs out of every feed and the pool. Run by the scheduler, not on every fetch. */
 export async function cleanup(): Promise<void> {
   await cleanupOldJobs();
+  await deleteExpiredSessions();
   const gone = await cleanupRejected();
   if (gone) console.log(`[cleanup] deleted ${gone} rejected application${gone === 1 ? "" : "s"}`);
 }

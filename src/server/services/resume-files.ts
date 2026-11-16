@@ -36,7 +36,7 @@ async function ytotech(code: string): Promise<Compiled> {
     body: JSON.stringify({ compiler: "pdflatex", resources: [{ main: true, content: code }] }),
     signal: AbortSignal.timeout(60_000),
   });
-  if (isPdf(res)) return { pdf: Buffer.from(await res.arrayBuffer()) };
+  if (isPdf(res)) return sized(Buffer.from(await res.arrayBuffer()));
   if (res.status === 400) {
     const body = (await res.json().catch(() => ({}))) as { log_files?: Record<string, string> };
     return { error: latexError(Object.values(body.log_files ?? {}).join("\n")) };
@@ -52,10 +52,13 @@ async function texliveNet(code: string): Promise<Compiled> {
   form.append("engine", "pdflatex");
   form.append("return", "pdf");
   const res = await fetch("https://texlive.net/cgi-bin/latexcgi", { method: "POST", body: form, signal: AbortSignal.timeout(60_000) });
-  if (isPdf(res)) return { pdf: Buffer.from(await res.arrayBuffer()) };
+  if (isPdf(res)) return sized(Buffer.from(await res.arrayBuffer()));
   if (res.ok) return { error: latexError(await res.text()) };
   throw new Error(`texlive.net ${res.status}`);
 }
+
+/** A compiled PDF is kept only if it's a plausible size; the compilers are outside services. */
+const sized = (pdf: Buffer): Compiled => (pdf.length <= MAX_PDF_BYTES ? { pdf } : { error: "The compiled PDF is too large to keep." });
 
 /** Did the compiler answer with a PDF (rather than an error page or a log)? */
 const isPdf = (res: Response) => res.ok && (res.headers.get("content-type") ?? "").includes("application/pdf");

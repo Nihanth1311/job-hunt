@@ -24,6 +24,16 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "no-referrer" },
           { key: "X-Content-Type-Options", value: "nosniff" },
+          // Browsers that have seen the site once use HTTPS for it from then on (ignored over plain http, e.g. localhost).
+          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+          // The site uses none of these device features, so no script on it may ask for them.
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()" },
+          // A window this site opens (or that opened it) gets no handle on it.
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          // Limits that hold even if some page were tricked into showing injected markup: no
+          // framing, no <base> rewriting links, no plugins, and forms may post only to this site
+          // (and to Overleaf, for "Open in Overleaf").
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self' https://www.overleaf.com" },
         ],
       },
       {

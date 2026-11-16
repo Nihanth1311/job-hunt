@@ -1,7 +1,7 @@
 import "server-only";
 import { scheduleChanged } from "@/shared/core/schedule";
 import { asc, eq } from "drizzle-orm";
-import { ACTIVE_WITHIN_MS, MAX_USERS, OWNER_ID } from "../auth";
+import { ACTIVE_WITHIN_MS, adminEmails, MAX_USERS, OWNER_ID } from "../auth";
 import { getDb, schema } from "../db";
 import type { User } from "../db/schema";
 import { fillFromPool } from "../fetching/fetcher";
@@ -26,7 +26,8 @@ export async function onFirstSignIn(user: User): Promise<void> {
       telegramChatId: process.env.TELEGRAM_CHAT_ID,
     } as const;
     for (const [name, value] of Object.entries(fromEnv)) {
-      if (value && !have[name as keyof typeof fromEnv]) await setSecret(user.id, name as keyof typeof fromEnv, value);
+      // A malformed value in .env is skipped: it must never stop someone signing in.
+      if (value && !have[name as keyof typeof fromEnv]) await setSecret(user.id, name as keyof typeof fromEnv, value).catch(() => {});
     }
   }
 
@@ -60,7 +61,7 @@ export async function listPeople(): Promise<Person[]> {
     email: u.email,
     name: u.name,
     image: u.image,
-    role: u.role,
+    role: adminEmails().includes(u.email) ? "admin" : "user",
     userId: u.id,
     invited: invited.has(u.email),
     lastLoginAt: u.lastLoginAt,
@@ -95,7 +96,7 @@ export async function removePerson(email: string, deleteData: boolean): Promise<
   const e = email.trim().toLowerCase();
   await db.delete(schema.invites).where(eq(schema.invites.email, e));
   const [user] = await db.select().from(schema.users).where(eq(schema.users.email, e));
-  if (!user || user.role === "admin") return;
+  if (!user || adminEmails().includes(user.email)) return; // admins are removed by editing ADMIN_EMAIL
   await db.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
   await db.delete(schema.helperDevices).where(eq(schema.helperDevices.userId, user.id)); // their laptop helper too
   forgetHelperUser(user.id);

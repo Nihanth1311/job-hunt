@@ -5,6 +5,7 @@ import { getDb, schema } from "../db";
 import { scheduleChanged } from "@/shared/core/schedule";
 import type { AnswerBank } from "@/shared/autofill";
 import { DEFAULT_PREFERENCES, DEFAULT_PROFILE, type Preferences, type Profile } from "@/shared/types";
+import { sanitizePreferences, sanitizeProfile } from "@/shared/validate";
 
 // Every person's profile, preferences and state live under their user id.
 // App-wide state (shared job pool, company site health) uses GLOBAL ("").
@@ -36,15 +37,18 @@ export async function getProfile(userId: string): Promise<Profile> {
   return { ...DEFAULT_PROFILE, ...saved, skills: { ...DEFAULT_PROFILE.skills, ...saved.skills } };
 }
 
-export const saveProfile = (userId: string, p: Profile) => setValue(userId, "profile", p);
+/** Saved only after sanitizeProfile has rebuilt it: known fields, sane sizes. */
+export const saveProfile = (userId: string, p: Profile) => setValue(userId, "profile", sanitizeProfile(p));
 
 export async function getPreferences(userId: string): Promise<Preferences> {
   const saved = (await getValue<Partial<Preferences>>(userId, "preferences")) ?? {};
-  return { ...DEFAULT_PREFERENCES, ...saved };
+  // Checked on the way out as well as on the way in: the scheduler divides by the fetch period,
+  // so a bad value saved before these checks existed must not reach it.
+  return sanitizePreferences({ ...DEFAULT_PREFERENCES, ...saved });
 }
 
 export async function savePreferences(userId: string, p: Preferences): Promise<void> {
-  await setValue(userId, "preferences", p);
+  await setValue(userId, "preferences", sanitizePreferences(p));
   scheduleChanged(); // the fetch period may have changed
 }
 
@@ -69,6 +73,11 @@ export const setTelegramEnabled = (on: boolean) => setState(GLOBAL, "telegramEna
 export const SECRET_NAMES = ["jsearchKey", "telegramBotToken", "telegramChatId"] as const;
 export type SecretName = (typeof SECRET_NAMES)[number];
 export type Secrets = Partial<Record<SecretName, string>>;
+const SECRET_SHAPE: Record<SecretName, RegExp> = {
+  jsearchKey: /^[A-Za-z0-9_-]{16,128}$/,
+  telegramBotToken: /^\d{5,15}:[A-Za-z0-9_-]{20,80}$/,
+  telegramChatId: /^(-?\d{1,20}|@[A-Za-z0-9_]{3,40})$/,
+};
 
 /** This person's keys, decrypted for use on the server. A key that can't be decrypted (SESSION_SECRET changed) is left out. */
 export async function getSecrets(userId: string): Promise<Secrets> {
@@ -86,6 +95,9 @@ export async function getSecrets(userId: string): Promise<Secrets> {
 export async function setSecret(userId: string, name: SecretName, value: string): Promise<void> {
   const db = await getDb();
   const v = value.trim();
+  // A key is one short run of visible characters. Refusing anything else keeps spaces, line
+  // breaks and path characters out of the request headers and addresses the key is put into.
+  if (v && !SECRET_SHAPE[name].test(v)) throw new Error("That doesn't look like a valid key.");
   if (!v) {
     await db.delete(schema.userSecrets).where(and(eq(schema.userSecrets.userId, userId), eq(schema.userSecrets.name, name)));
     return;

@@ -1,11 +1,12 @@
 import "server-only";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, lt } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { getDb, schema } from "../db";
 import type { User } from "../db/schema";
 import { randomToken, sha256 } from "./crypto";
+import { currentCaller, isBlocked, isKnownGood, noteFailure, rememberGood } from "./rate-limit";
 
 // Sign-in is Google only, invite-only. A session is a random token in an httpOnly cookie;
 // the database keeps only its SHA-256, so a leaked database can't be used to sign in, and
@@ -44,14 +45,29 @@ export const devLoginAllowed = (hostname: string) =>
  */
 export const getSessionUser = cache(async (): Promise<User | null> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!token) return null;
+  // A real token is 32 random bytes in base64url: exactly 43 characters. Anything else is
+  // refused here, without a database lookup.
+  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  const hash = sha256(token);
+  // Guessing: after 30 unknown cookies in 10 minutes a caller's lookups stop reaching the
+  // database. A cookie that worked recently skips this, so nobody signed in is locked out.
+  const who = await currentCaller();
+  if (!isKnownGood(hash) && isBlocked("session", who, 30)) return null;
   const db = await getDb();
   const [row] = await db
     .select({ user: schema.users })
     .from(schema.sessions)
     .innerJoin(schema.users, eq(schema.sessions.userId, schema.users.id))
-    .where(and(eq(schema.sessions.id, sha256(token)), gt(schema.sessions.expiresAt, new Date())));
+    .where(and(eq(schema.sessions.id, hash), gt(schema.sessions.expiresAt, new Date())));
   const user = row?.user ?? null;
+  if (!user) {
+    noteFailure("session", who, GUESS_WINDOW_MS);
+    return null;
+  }
+  rememberGood(hash);
+  // Who is an admin is decided by ADMIN_EMAIL alone, on every request: taking an address off
+  // that list removes admin rights at once, whatever the database row still says.
+  user.role = adminEmails().includes(user.email) ? "admin" : "user";
   // "Last seen", for the Admin page. Written at most every few minutes, not on every request.
   if (user && (!user.lastSeenAt || Date.now() - user.lastSeenAt.getTime() > SEEN_EVERY_MS)) {
     const now = new Date();
@@ -63,6 +79,7 @@ export const getSessionUser = cache(async (): Promise<User | null> => {
 
 /** "Last seen" is written at most this often per person. */
 const SEEN_EVERY_MS = 3 * 60_000;
+const GUESS_WINDOW_MS = 10 * 60_000;
 /** Used the app this recently → shown as "Active". */
 export const ACTIVE_WITHIN_MS = 10 * 60_000;
 
@@ -85,6 +102,7 @@ export async function startSession(userId: string): Promise<void> {
   const token = randomToken();
   const db = await getDb();
   await db.insert(schema.sessions).values({ id: sha256(token), userId, expiresAt: new Date(Date.now() + SESSION_DAYS * 86_400_000) });
+  rememberGood(sha256(token));
   // httpOnly: page scripts can't read the cookie. sameSite "lax": other sites can't make the
   // browser send it with their own form posts or background requests.
   (await cookies()).set(SESSION_COOKIE, token, {
@@ -97,6 +115,12 @@ export async function startSession(userId: string): Promise<void> {
 }
 
 /** Sign out this browser: delete its session row and its cookie. */
+/** Sessions past their expiry date: deleted, so the table doesn't grow for ever. Run with the scheduler's cleanup. */
+export async function deleteExpiredSessions(): Promise<void> {
+  const db = await getDb();
+  await db.delete(schema.sessions).where(lt(schema.sessions.expiresAt, new Date()));
+}
+
 export async function endSession(): Promise<void> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
@@ -122,7 +146,7 @@ export async function signInVerified(profile: { email: string; name: string; ima
   if (existing) {
     const [user] = await db
       .update(schema.users)
-      .set({ name: profile.name || existing.name, image: profile.image, lastLoginAt: new Date(), role: isAdmin ? "admin" : existing.role })
+      .set({ name: profile.name || existing.name, image: profile.image, lastLoginAt: new Date(), role: isAdmin ? "admin" : "user" })
       .where(eq(schema.users.id, existing.id))
       .returning();
     // Still allowed? (An admin may have removed the invite.)

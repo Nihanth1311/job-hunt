@@ -4,6 +4,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { randomToken, sha256 } from "../auth/crypto";
 import { getDb, schema } from "../db";
 import type { AutofillRun } from "../db/schema";
+import { siteLabel } from "@/shared/core/links";
 import { addEvent, trackJob } from "./applications";
 import { getResumePdf } from "./resume-files";
 import { getAnswerBank, getProfile, saveAnswerBank } from "./settings";
@@ -48,6 +49,7 @@ const DEVICE_CACHE_MS = 10 * 60_000;
 const SEEN_SAVE_MS = 10 * 60_000;
 /** The helper asks every few seconds; this long without a question means it's stopped. */
 const ONLINE_MS = 45_000;
+const MAX_DEVICES = 10;
 
 /** This run changed: the job page's next "anything new?" gets the new state. */
 const bump = (runId: string) => mem.versions.set(runId, (mem.versions.get(runId) ?? 0) + 1);
@@ -73,6 +75,9 @@ export function takeCancelled(userId: string): string[] {
 export async function createHelperDevice(userId: string, name: string): Promise<string> {
   const token = `jhh_${randomToken(30)}`;
   const db = await getDb();
+  // At most MAX_DEVICES links per person: linking another drops the oldest.
+  const have = await listHelperDevices(userId);
+  for (const old of have.slice(MAX_DEVICES - 1)) await removeHelperDevice(userId, old.id);
   await db.insert(schema.helperDevices).values({ id: randomUUID(), userId, tokenHash: sha256(token), name: name.trim().slice(0, 60) || "My laptop" });
   return token;
 }
@@ -195,7 +200,8 @@ export async function queueRun(userId: string, jobId: string, resumeId: string):
 
   const [run] = await db
     .insert(schema.autofillRuns)
-    .values({ id: randomUUID(), userId, jobId, resumeId, applyUrl: target.url, message: "Waiting for the helper on your laptop." })
+    // Name the site: your details are about to be typed into it, so it should be one you expect.
+    .values({ id: randomUUID(), userId, jobId, resumeId, applyUrl: target.url, message: `Waiting for the helper on your laptop. It will open ${siteLabel(target.url)}.` })
     .returning();
   bump(run.id);
   wake(userId);

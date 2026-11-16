@@ -113,7 +113,9 @@ class Helper {
     try {
       let open = this.open.get(task.runId);
       if (!open || open.page.isClosed()) {
-        log(`Opening ${label}`);
+        log(`Opening ${label} (${hostOf(task.applyUrl)})`);
+        // Only ever a web page: never a file on this laptop or a script address.
+        if (!/^https?:\/\//i.test(task.applyUrl)) throw new Error("the form's address isn't a web page");
         const resumePath = task.resume ? await this.download(task) : null;
         const ctx = await this.browser();
         const blank = ctx.pages().find((p) => p.url() === "about:blank" && ![...this.open.values()].some((o) => o.page === p));
@@ -262,7 +264,8 @@ class Helper {
 
   /** Save this run's resume PDF under ~/.jobhunt-helper/files/<run id>/ and return its path, for the form's file box. */
   private async download(task: HelperTask): Promise<string> {
-    const dir = path.join(FILES_DIR, task.runId);
+    // The run id becomes a folder name: keep only characters that can't climb out of FILES_DIR.
+    const dir = path.join(FILES_DIR, task.runId.replace(/[^A-Za-z0-9_-]/g, "_"));
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, path.basename(task.resume!.fileName).replace(/[^\w.\- ]+/g, "_") || "Resume.pdf");
     fs.writeFileSync(file, await this.site.resume(task.runId));
@@ -274,6 +277,13 @@ class Helper {
   }
 }
 
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "unknown site";
+  }
+};
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** The first 6,000 characters of text on the page ("" if the page can't be read right now). */
 const bodyText = (page: Page) => page.evaluate("document.body ? document.body.innerText.slice(0, 6000) : ''").catch(() => "") as Promise<string>;
@@ -328,6 +338,20 @@ async function signIn(url: string) {
   console.log('Saved. Start the helper again with "npm run helper" and press Autofill; that site is already signed in.');
 }
 
+/**
+ * The helper sends its token, and receives your contact details and resume, over this address:
+ * it must be https, so nobody on the network can read them. Plain http is allowed only for a
+ * site running on this same computer (development).
+ */
+function safeSite(site: string): boolean {
+  try {
+    const u = new URL(site);
+    return u.protocol === "https:" || (u.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname));
+  } catch {
+    return false;
+  }
+}
+
 /** Reads the command (connect, signin, or none) and runs it. */
 async function main() {
   const [cmd, ...args] = process.argv.slice(2);
@@ -337,7 +361,7 @@ async function main() {
   }
   if (cmd === "connect") {
     const [site, token] = args;
-    if (!site || !/^https?:\/\//.test(site) || !token?.startsWith("jhh_")) {
+    if (!site || !safeSite(site) || !token?.startsWith("jhh_")) {
       console.log("Use the command from Settings → Laptop helper: npm run helper -- connect <site address> <token>");
       process.exit(1);
     }
@@ -349,6 +373,10 @@ async function main() {
   }
 
   const config = readConfig();
+  if (config && !safeSite(config.site)) {
+    console.log("The saved site address isn't https. Link this laptop again from Settings → Laptop helper.");
+    process.exit(1);
+  }
   if (!config) {
     console.log("This laptop isn't linked yet. In Job Hunt, open Settings → Laptop helper, press “Link a laptop” and run the command it shows.");
     process.exit(1);

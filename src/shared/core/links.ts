@@ -34,6 +34,22 @@ const JOB_BOARDS =
 const COMPANY_ATS =
   /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|myworkdaysite\.com|smartrecruiters\.com|workable\.com|icims\.com|successfactors\.(com|eu)|taleo\.net|oraclecloud\.com|jobvite\.com|recruitee\.com|breezy\.hr|bamboohr\.com|darwinbox\.in|keka\.com|zohorecruit\.(com|in)|freshteam\.com|personio\.(de|com)|teamtailor\.com|eightfold\.ai|phenompeople\.com|avature\.net|turbohire\.co|rippling\.com|pinpointhq\.com|dover\.com|amazon\.jobs|metacareers\.com|careers\.google\.com|careers\.microsoft\.com)$/i;
 
+/**
+ * A link that is safe to store and show: an http(s) address of sensible length, else "".
+ * Keeps out "javascript:" and "data:" links, which would run code when clicked.
+ */
+export function safeHttpUrl(url: unknown, max = 2000): string {
+  if (typeof url !== "string") return "";
+  const u = url.trim();
+  if (!u || u.length > max) return "";
+  try {
+    const parsed = new URL(u);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? u : "";
+  } catch {
+    return "";
+  }
+}
+
 export function hostOf(url: string | null | undefined): string | null {
   if (!url) return null;
   try {

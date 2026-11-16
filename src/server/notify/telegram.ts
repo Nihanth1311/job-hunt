@@ -14,7 +14,8 @@ export function telegramConfigured(keys: TelegramKeys): boolean {
 }
 
 export function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // Quotes too: this text is also put inside href="…" attributes.
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /** `html` may use Telegram's basic tags (<b>, <i>, <a href>); escape any user text with escapeHtml. */

@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+# The workflow's GitHub token can read the code and nothing else.
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest

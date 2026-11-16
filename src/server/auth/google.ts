@@ -106,5 +106,20 @@ export async function verifiedProfile(code: string, verifier: string, redirectUr
   return { email: claims.email, name: claims.name ?? "", image: claims.picture ?? null };
 }
 
-/** Only redirect inside this site after sign-in. */
-export const safeNext = (next: unknown) => (typeof next === "string" && next.startsWith("/") && !next.startsWith("//") ? next : "/");
+/**
+ * Only redirect inside this site after sign-in. A path must start with one "/" and hold no
+ * backslash or control character: browsers read "/\\evil.com" the same as "//evil.com", which
+ * is another site. As a second check, the path is resolved the way a browser would and must
+ * still land on the same origin.
+ */
+export function safeNext(next: unknown): string {
+  if (typeof next !== "string" || next.length > 2000) return "/";
+  if (!next.startsWith("/") || next.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(next)) return "/";
+  try {
+    const base = "https://site.invalid";
+    const to = new URL(next, base);
+    return to.origin === base ? next : "/";
+  } catch {
+    return "/";
+  }
+}

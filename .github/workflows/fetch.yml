@@ -11,6 +11,10 @@ on:
     - cron: "7 * * * *"
   workflow_dispatch: # "Run workflow" button, to fetch on demand
 
+# The workflow's GitHub token can read the code and nothing else.
+permissions:
+  contents: read
+
 jobs:
   fetch:
     runs-on: ubuntu-latest
