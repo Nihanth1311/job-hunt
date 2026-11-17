@@ -113,6 +113,40 @@ export const SCAN_JS = String.raw`(() => {
   // A text field's label: <label for>, aria-labelledby, the label it sits in (Lever), or its box's title.
   // Words widgets add to their own captions ("Select One Required"): not part of any question.
   const denoise = (t) => clean((t || "").replace(/(\s*\b(select one|choose one|select|required|search|press enter to search)\b\s*)+$/i, ""));
+  // A control nobody labelled properly (no <label for>, no aria): climb to the nearest ancestor that
+  // holds this control and no other, and take that ancestor's label or heading. Stops as soon as
+  // an ancestor holds a second control, so a neighbour's label is never borrowed.
+  const controlsIn = (p) => {
+    const seen = new Set();
+    for (const c of p.querySelectorAll("input:not([type=hidden]), select, textarea, button[aria-haspopup=listbox], [role=combobox]")) {
+      seen.add(c.type === "radio" || c.type === "checkbox" ? "group:" + (c.name || "") : c);
+    }
+    return seen.size;
+  };
+  const loneLabel = (el) => {
+    for (let p = el.parentElement, i = 0; p && p !== document.body && i < 5; p = p.parentElement, i++) {
+      if (controlsIn(p) > 1) break;
+      for (const c of p.querySelectorAll("label, legend, [class*=label i], [class*=question-title i], h3, h4, h5")) {
+        if (c.contains(el)) continue;
+        const t = denoise(txt(c));
+        if (t) return { text: t, el: c };
+      }
+      // No label-like element either: the words written around the control are its question
+      // (a plain <p> or <div> above a dropdown). The control's own text and any open list are left out.
+      const around = [];
+      const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        const host = n.parentElement;
+        if (!host || el.contains(host) || host.closest("[role=listbox], [role=option], [role=menu], select, script, style, [hidden]")) continue;
+        around.push(n.nodeValue);
+      }
+      const said = denoise(clean(around.join(" ")));
+      if (said && said.length <= 600) return { text: said, el: { textContent: said + (/[*✱]/.test(around.join("")) ? "*" : "") } };
+    }
+    return { text: "", el: null };
+  };
+  // What a dropdown shows before anything is chosen: not an answer, and not a choice.
+  const PLACEHOLDER = /^(-+\s*)?(select|choose|please select|please choose|pick one|none selected)\b.{0,24}$|^[-–—.\s]*$/i;
   const labelOf = (el) => {
     const own = forLabel(el);
     if (own && denoise(txt(own)) && !/^attach$/i.test(txt(own))) return { text: denoise(txt(own)), el: own };
@@ -128,6 +162,8 @@ export const SCAN_JS = String.raw`(() => {
     if (denoise(t.text)) return { text: denoise(t.text), el: t.el };
     const aria = denoise(el.getAttribute("aria-label"));
     if (aria) return { text: aria, el: null };
+    const lone = loneLabel(el);
+    if (lone.text) return lone;
     return { text: clean(el.getAttribute("placeholder") || el.name || ""), el: null };
   };
   // Open pop-up lists, page furniture and Workday's chosen-items lists aren't questions.
@@ -147,7 +183,7 @@ export const SCAN_JS = String.raw`(() => {
 
   const out = [];
   const doneGroups = new Set();
-  for (const el of document.querySelectorAll("input, textarea, select, button[data-option], button[aria-haspopup=listbox]")) {
+  for (const el of document.querySelectorAll("input, textarea, select, button[data-option], button[aria-haspopup=listbox], [role=combobox]")) {
     if (inMenu(el)) continue;
     if (el.getAttribute("data-automation-id") === "beecatcher") continue; // Workday's trap for bots
     const type = (el.getAttribute("type") || el.tagName).toLowerCase();
@@ -178,8 +214,11 @@ export const SCAN_JS = String.raw`(() => {
       continue;
     }
 
-    // Workday's dropdowns: a button that opens a list.
-    if (el.tagName === "BUTTON" && el.getAttribute("aria-haspopup") === "listbox") {
+    // Dropdowns that are a button (or a plain box) opening a list: Workday's, and the
+    // role="combobox" kind many design systems use (Microsoft's among them).
+    const boxCombo = el.getAttribute("role") === "combobox" && !["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName) && !el.querySelector("input:not([type=hidden]), select, textarea");
+    if (el.getAttribute("role") === "combobox" && !["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName) && !boxCombo) continue; // a wrapper around a real input: that input is the field
+    if ((el.tagName === "BUTTON" && el.getAttribute("aria-haspopup") === "listbox") || boxCombo) {
       if (!vis(el)) continue;
       const aria = el.getAttribute("aria-label") || "";
       const l = labelOf(el);
@@ -190,7 +229,7 @@ export const SCAN_JS = String.raw`(() => {
         kind: "combobox",
         label,
         required: el.getAttribute("aria-required") === "true" || / required/i.test(aria) || starred(l.el),
-        value: /^select one$/i.test(shown) ? "" : shown,
+        value: PLACEHOLDER.test(shown) ? "" : shown,
       });
       continue;
     }
@@ -230,7 +269,7 @@ export const SCAN_JS = String.raw`(() => {
         id: tag(el),
         kind: "file",
         label: labelOf(el).text,
-        required: el.required || el.getAttribute("aria-required") === "true" || starred(titleOf(box).el),
+        required: el.required || el.getAttribute("aria-required") === "true" || starred(labelOf(el).el) || (!!el.closest(BOX) && starred(titleOf(el.closest(BOX)).el)),
         value: "",
         context: clean((box ? box.innerText : "") || "").slice(0, 200),
         hasFile: !!(zone && zone.querySelector("[data-automation-id^=file-upload-item], [data-automation-id=file-upload-successful], [data-automation-id=delete-file]")),
@@ -278,9 +317,10 @@ export const SCAN_JS = String.raw`(() => {
     const box = boxOf(el);
     const required = el.required || el.getAttribute("aria-required") === "true" || starred(l.el) || (!l.el && starred(titleOf(box).el));
     if (el.tagName === "SELECT") {
-      const options = [...el.options].filter((o) => o.value !== "" && txt(o)).map(txt);
+      const real = (o) => o.value !== "" && txt(o) && !PLACEHOLDER.test(txt(o));
+      const options = [...el.options].filter(real).map(txt);
       const chosen = el.selectedOptions[0];
-      add({ id: tag(el), kind: "select", label: l.text, required, value: chosen && chosen.value !== "" ? txt(chosen) : "", options });
+      add({ id: tag(el), kind: "select", label: l.text, required, value: chosen && real(chosen) ? txt(chosen) : "", options });
       continue;
     }
     if (el.getAttribute("role") === "combobox") {

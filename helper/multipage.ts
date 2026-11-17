@@ -15,6 +15,8 @@ import { ADDS_JS, NEXT_JS, SCAN_JS, START_JS, STATE_JS, type FormField, type Pag
 /** Safety stops: never work through more pages, or press more "Apply"-type start buttons, than this in one go. */
 const MAX_PAGES = 15;
 const MAX_STARTS = 4;
+/** What a bot wall calls itself. */
+const BLOCKED = /access denied|forbidden|are you a (robot|human)|verify (that )?you are (a )?human|unusual traffic|request blocked|attention required|just a moment/i;
 const WORKDAY_HOST = /^https:\/\/[^/]*\.(myworkdayjobs|myworkdaysite|workday)\.com\//i;
 
 /** One multi-page application being worked through. */
@@ -97,6 +99,15 @@ export async function advance(flow: Flow): Promise<Outcome> {
       return out(
         "waiting",
         "Sign in, or create your account, in the Chrome window. The helper never types passwords or codes; it carries on by itself once you're in. If the site won't let you sign in there, stop the helper and run: npm run helper -- signin <the page's address>",
+      );
+    }
+
+    // Some careers sites refuse a browser that a program controls and show a block page instead
+    // of the job. Say so, with what to do, rather than waiting for a form that will never come.
+    if (!fields.length && BLOCKED.test(`${s.heading} ${await page.title().catch(() => "")}`)) {
+      return out(
+        "waiting",
+        "This site refused the helper's Chrome (it shows “Access Denied” or a robot check). Reload the page in that window; if it stays blocked, apply to this one in your own browser.",
       );
     }
 

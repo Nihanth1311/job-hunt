@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { randomToken, sha256 } from "../auth/crypto";
 import { getDb, schema } from "../db";
 import type { AutofillRun } from "../db/schema";
@@ -11,6 +11,8 @@ import { getAnswerBank, getProfile, saveAnswerBank } from "./settings";
 import {
   ACTIVE_RUN,
   applyTarget,
+  applyUrlFor,
+  type AutofillPlatform,
   contactFromProfile,
   normQuestion,
   type AutofillReport,
@@ -141,6 +143,40 @@ export async function helperAccount(userId: string): Promise<string> {
 /** Is this person's helper running right now? (It asks for work every few seconds while it does.) */
 export const helperOnline = (userId: string) => Date.now() - (mem.seenAt.get(userId) ?? 0) < ONLINE_MS;
 
+// ---------- Which form ----------
+
+/**
+ * The form to open for a job. Same as applyTarget (shared/autofill.ts), plus one thing only the
+ * server can do: a job read from a Greenhouse board usually links to the company's own careers
+ * site (rubrik.com/…?gh_jid=123), where the form is the company's own build. The shared job pool
+ * still knows which board and posting it came from ("greenhouse:<board>:<id>"), so look it up
+ * there and open Greenhouse's own form, which is filled in one go.
+ */
+export async function resolveApplyTarget(job: { source: string; url: string; companyUrl: string | null }): Promise<{ platform: AutofillPlatform; url: string } | null> {
+  const target = applyTarget(job);
+  if (!target || target.platform !== "site" || job.source !== "greenhouse") return target;
+  const links = [job.companyUrl, job.url].filter((l): l is string => !!l);
+  const ids = links.map((l) => l.match(/[?&]gh_jid=(\d{4,})/)?.[1]).filter((x): x is string => !!x);
+  try {
+    const db = await getDb();
+    const [row] = await db
+      .select({ key: schema.rawJobs.sourceKey })
+      .from(schema.rawJobs)
+      .where(
+        and(
+          like(schema.rawJobs.sourceKey, "greenhouse:%"),
+          or(inArray(sql<string>`${schema.rawJobs.data}->>'url'`, links), ...ids.map((id) => like(schema.rawJobs.sourceKey, `greenhouse:%:${id}`))),
+        ),
+      )
+      .limit(1);
+    const [, board, id] = row?.key.match(/^greenhouse:(.+):(\d+)$/) ?? [];
+    if (board && id) return { platform: "greenhouse", url: applyUrlFor("greenhouse", board, id) };
+  } catch (e) {
+    console.warn("[autofill] couldn't look up the Greenhouse form", e instanceof Error ? e.message : e);
+  }
+  return target; // not in the pool any more: the company's own page, in guided mode
+}
+
 // ---------- Runs, from the site ----------
 
 /** A run as the job page receives it: the database row plus its in-memory version number. */
@@ -182,7 +218,7 @@ export async function queueRun(userId: string, jobId: string, resumeId: string):
   const db = await getDb();
   const [job] = await db.select().from(schema.jobs).where(and(eq(schema.jobs.id, jobId), eq(schema.jobs.userId, userId)));
   if (!job) return { error: "This job isn't in your feed any more." };
-  const target = applyTarget(job);
+  const target = await resolveApplyTarget(job);
   if (!target) return { error: "This job only has a job-board link (LinkedIn, Naukri…), where automated applying isn't allowed." };
   const pdf = await getResumePdf(userId, resumeId);
   if (!pdf) return { error: "That resume has no PDF. Upload a PDF or save it as LaTeX on the Resumes page." };
@@ -340,7 +376,8 @@ export async function nextTask(userId: string, force = false): Promise<HelperTas
     runId: run.id,
     status: run.status as "queued" | "answered",
     applyUrl: run.applyUrl,
-    platform: job ? (applyTarget(job)?.platform ?? null) : null,
+    // From the address this run was queued with (it may be Greenhouse's form, not the job's own link).
+    platform: applyTarget({ url: run.applyUrl, companyUrl: null })?.platform ?? null,
     job: { title: job?.title ?? "", company: job?.company ?? "" },
     contact: contactFromProfile(profile),
     bank,

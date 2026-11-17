@@ -20,8 +20,7 @@ import { formatDate, isOverdue, timeAgo } from "@/shared/format";
 import { allResumes, getBaseResumes, jobPageData } from "@/server/services/queries";
 import { requireUser } from "@/server/auth";
 import { getPreferences, getProfile, getSecrets, getState } from "@/server/services/settings";
-import { helperOnline, latestRun } from "@/server/services/autofill";
-import { applyTarget } from "@/shared/autofill";
+import { helperOnline, latestRun, resolveApplyTarget } from "@/server/services/autofill";
 import { STATUS_LABEL, TRACK_LABEL, TRACK_TITLE, type AppStatus, type Preferences, type Track } from "@/shared/types";
 
 export async function generateMetadata({ params }: PageProps<"/jobs/[id]">): Promise<Metadata> {
@@ -67,7 +66,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const track = (job.track in TRACK_TITLE ? job.track : "fullstack") as Track;
   // Autofill: every resume that is (or can become) a PDF. Made for this job first, then base
   // resumes (this job's role type first, newest first), then the ones made for other jobs.
-  const target = applyTarget(job);
+  const target = await resolveApplyTarget(job);
   const trackName = (t: string) => TRACK_LABEL[t as Track] ?? t;
   const day = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   const text = (r: { isLatex: boolean; hasFile: boolean }) => (r.isLatex || r.hasFile ? "" : " · text, made into a PDF");

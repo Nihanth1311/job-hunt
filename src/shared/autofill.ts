@@ -26,10 +26,13 @@ export const PLATFORM_LABEL: Record<AutofillPlatform, string> = {
 /** Forms the helper moves through page by page. */
 export const MULTI_PAGE: AutofillPlatform[] = ["workday", "site"];
 
-const applyUrlFor = (platform: AutofillPlatform, slug: string, id: string) => {
+export const applyUrlFor = (platform: AutofillPlatform, slug: string, id: string) => {
   const s = encodeURIComponent(slug);
   const i = encodeURIComponent(id);
-  if (platform === "greenhouse") return `https://job-boards.greenhouse.io/${s}/jobs/${i}`;
+  // Greenhouse's standalone form. Not job-boards.greenhouse.io/<board>/jobs/<id>: many companies
+  // (Rubrik, Stripe, Databricks…) set that address to redirect to their own careers site, where
+  // the form is their own build and some sites turn automated browsers away.
+  if (platform === "greenhouse") return `https://job-boards.greenhouse.io/embed/job_app?for=${s}&token=${i}`;
   if (platform === "lever") return `https://jobs.lever.co/${s}/${i}/apply`;
   return `https://jobs.ashbyhq.com/${s}/${i}/application`;
 };
@@ -352,8 +355,13 @@ function adult(dob: string): string {
 /** "Are you happy to continue with your application?": answered from your Profile setting, not treated as an agreement. */
 const CONTINUE = /(happy|wish|want|like|willing) to (continue|proceed) with (your|the|this) application|(continue|proceed) with (your|the|this) application/;
 
-/** Agreements, consent and attestations: never answered for you. */
-const AGREEMENT = /\b(i agree|agree to|consent|acknowledge|certify|attest|i understand|terms (and|&) conditions|privacy (policy|notice)|declare that|confirm that)\b/;
+/**
+ * Agreements, consent and attestations: never answered for you. That includes signing by typing
+ * your name ("indicate your agreement by typing your full name below"), which would otherwise
+ * look like an ordinary "full name" box.
+ */
+const AGREEMENT =
+  /\b(i agree|agree to|indicate your agreement|consent|acknowledge|certify|attest|i understand|terms (and|&) conditions|privacy (policy|notice)|declare that|confirm that|e ?signature|sign (here|below)|typ(e|ing) your (full |legal )?name)\b/;
 
 /** First match wins. Patterns run on normQuestion(label). */
 const RULES: Rule[] = [
@@ -556,7 +564,7 @@ export function pickOption(answer: string, options: string[]): string | null {
   const no = /^(no|n|false)\b/.test(a);
   if (yes || no) {
     // "No" is also "I do not require…", "None", "Not applicable"; "Yes" is also "I do", "I am".
-    const NO_WORDS = /^(no|none|not|never|n a|i (do|am|have|would|will|shall|does) not|i (don|won|wouldn|haven) t|i m not|i have no|i neither|do not|does not|will not)\b/;
+    const NO_WORDS = /^(no|none|not|never|n a|i (do|am|have|would|will|shall|does) not|i (don|won|wouldn|haven) t|i m not|i have no|i (have |ve )?never|i neither|do not|does not|will not)\b/;
     const YES_WORDS = /^(yes|i (do|am|have|require|would|will|need)|i m)\b/;
     const matches = opts.filter((o) => (yes ? YES_WORDS.test(simple(o)) && !NO_WORDS.test(simple(o)) : NO_WORDS.test(simple(o))));
     // Several kinds of yes ("Yes - I am a citizen", "Yes - I have a visa"): a citizen's answer first.
