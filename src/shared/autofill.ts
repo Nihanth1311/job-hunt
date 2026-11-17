@@ -366,7 +366,7 @@ const AGREEMENT =
 /** First match wins. Patterns run on normQuestion(label). */
 const RULES: Rule[] = [
   // Never filled: hidden traps for bots, and optional fields that are better left empty.
-  SKIPPED(/robots only|leave (this|it) (blank|empty)|preferred (first )?name|nickname|middle name|address line 2|\bsuffix\b|local (given|family|first|last) name|phone extension/),
+  SKIPPED(/citizenship 2|second (citizenship|nationality)|additional (citizenship|nationality)|other (citizenship|nationality)|alternate phone|alternative phone|secondary phone|other phone|robots only|leave (this|it) (blank|empty)|preferred (first )?name|nickname|middle name|address line 2|\bsuffix\b|local (given|family|first|last) name|phone extension/),
   SKIPPED(/twitter|\bx com\b|instagram|facebook|tiktok/),
   P(/\bfirst name|given name/, "firstName"),
   P(/\blast name|surname|family name/, "lastName"),
@@ -399,6 +399,7 @@ const RULES: Rule[] = [
   B(/date of birth|\bdob\b|birth ?date|born on/, "dob"),
   B(/statutory auditor|external auditor|(employed|worked) .{0,60}\b(kpmg|deloitte|pwc|pricewaterhouse|ernst|\bey\b)\b/, "auditorEmployed"),
   B(/\bstakeholder|connected person/, "connectedPerson"),
+  B(/conflict of interest/, "preventEmployment"),
   B(/reason .{0,40}prevent|prevent you .{0,40}(taking up|joining|employment|starting)|stop you (from )?(taking|joining)/, "preventEmployment"),
   B(/adjustment|accommodation|accessib|disabilit.{0,30}support/, "needsAdjustment"),
   B(/regulator|regulatory body|disciplined|subject to (an )?investigation/, "regulatoryAction"),
@@ -553,7 +554,7 @@ const simple = (s: string) =>
  * asked rather than guessed). "Yes" picks "Yes, I am authorised…"; "30 days" picks "Within 30 days".
  */
 export function pickOption(answer: string, options: string[]): string | null {
-  const opts = options.filter((o) => o.trim() && !/^(select|choose|please select)\b/i.test(o.trim()));
+  const opts = options.filter((o) => o.trim() && !/^(select|choose|please select|no selection|none selected)\b/i.test(o.trim()));
   if (!opts.length) return null;
   const a = simple(answer);
   if (!a) return null;
@@ -627,7 +628,7 @@ const SAME_THING = [
   /indeed/i,
   /glassdoor/i,
   /refer(red|ral)?\b|employee referral/i,
-  /career|company (web ?)?site|corporate (web ?)?site|employer (web ?)?site|\bwebsite\b|careers? page|job site/i,
+  /careers? (web ?)?(site|page|portal)|company (web ?)?site|corporate (web ?)?site|employer (web ?)?site|\bwebsite\b|job site/i,
   /job (board|portal|site)|online job/i,
   /campus|university|college/i,
   /\bb\.?\s?(tech|e|sc|com|ca|ba)\b|bachelor|undergraduate|graduate degree/i,

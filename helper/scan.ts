@@ -146,7 +146,7 @@ export const SCAN_JS = String.raw`(() => {
     return { text: "", el: null };
   };
   // What a dropdown shows before anything is chosen: not an answer, and not a choice.
-  const PLACEHOLDER = /^(-+\s*)?(select|choose|please select|please choose|pick one|none selected)\b.{0,24}$|^[-–—.\s]*$/i;
+  const PLACEHOLDER = /^(-+\s*)?(select|choose|please select|please choose|pick one|none selected|no selection)\b.{0,24}$|^[-–—.\s]*$/i;
   const labelOf = (el) => {
     const own = forLabel(el);
     if (own && denoise(txt(own)) && !/^attach$/i.test(txt(own))) return { text: denoise(txt(own)), el: own };
@@ -376,7 +376,8 @@ export const SUBMITTED_URL = /\/(confirmation|thanks|thank-you|thank_you|submitt
 /**
  * Where a multi-page form is: the step it's on, whether it waits for a sign-in, and any error
  * messages showing.
- *   gate     a password or one-time-code box is showing: the helper waits for you
+ *   gate     a sign-in screen: a password or one-time-code box with little else to fill. The
+ *            helper waits for you. (A long form that also has a password box is not a gate.)
  *   step     the name of the current step in Workday's progress bar ("" on other sites)
  *   index    that step's position in the bar (-1 when there's no bar)
  *   heading  the page's first visible heading, used when there's no step name
@@ -401,6 +402,13 @@ export const STATE_JS = String.raw`(() => {
   const password = [...document.querySelectorAll("input[type=password], input[autocomplete=one-time-code]")].some(vis);
   const body = txt(document.body).slice(0, 3000);
   const inputs = [...document.querySelectorAll("main input, main textarea, form input, form textarea")].filter(vis).length;
+  // The boxes a person fills in, other than passwords and codes. A sign-in or sign-up screen has
+  // one or two (email, maybe a name). An application form that also asks you to choose a password
+  // for an account (SuccessFactors does: Ericsson, SAP, Siemens…) has many: that page is to be
+  // filled, with only the password left to you.
+  const fillable = [...document.querySelectorAll("input, textarea, select")].filter(
+    (e) => vis(e) && !/^(hidden|password|submit|button|image|reset|checkbox|radio|file|search)$/i.test(e.type || "") && e.autocomplete !== "one-time-code" && !e.closest("header, nav, footer"),
+  ).length;
   const code = inputs <= 7 && /verification code|enter the code|one[- ]time (pass|code)|verify your (account|email)/i.test(body);
   const errors = [...document.querySelectorAll("[data-automation-id=errorBanner], [data-automation-id=errorMessage], [data-automation-id^=inputAlert], [role=alert]")]
     .filter(vis)
@@ -408,7 +416,7 @@ export const STATE_JS = String.raw`(() => {
     .filter((s) => s && !/success|uploaded|saved/i.test(s))
     .slice(0, 8);
   return {
-    gate: password || code,
+    gate: (password && fillable <= 4) || code,
     step: txt(active).replace(/^current step \d+ of \d+\s*/i, ""),
     index: active ? steps.indexOf(active.closest("li") || active) : -1,
     heading: txt(heading).slice(0, 80),

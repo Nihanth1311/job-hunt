@@ -107,6 +107,20 @@ export async function fillForm(page: Page, task: HelperTask, resumePath: string 
     fields = await scan(page);
   }
 
+  // A form that creates an account as part of applying asks you to choose a password. The helper
+  // never types passwords (or one-time codes): each empty box is listed as yours to fill in Chrome.
+  const secrets = (await page
+    .evaluate(() =>
+      [...document.querySelectorAll<HTMLInputElement>("input[type=password], input[autocomplete=one-time-code]")]
+        .filter((e) => (e.offsetWidth || e.offsetHeight) && !e.value)
+        .map((e) => {
+          const l = (e.id && document.querySelector(`label[for="${CSS.escape(e.id)}"]`)) || e.closest("label");
+          return ((l as HTMLElement | null)?.innerText || e.getAttribute("aria-label") || e.placeholder || "Password").replace(/[\s*✱:]+$/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+        }),
+    )
+    .catch(() => [])) as string[];
+  for (const name of secrets) questions.push({ label: `${name} (type it in Chrome: the helper never types passwords)`, kind: "text", required: true, manual: true });
+
   const seen = new Set<string>();
   const unique = questions.filter((q) => (seen.has(q.label) ? false : (seen.add(q.label), true)));
   const blocking = unique.filter((q) => q.required && !q.agreement && !q.manual).length;

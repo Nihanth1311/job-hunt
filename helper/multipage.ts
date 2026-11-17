@@ -158,11 +158,13 @@ export async function advance(flow: Flow): Promise<Outcome> {
     }
 
     const next = (await page.evaluate(NEXT_JS)) as { kind: string; text: string; disabled?: boolean };
+    // Things only you can do on this page (a password to choose, a consent box): say so first.
+    const yours = result.yoursInChrome > 0 ? `First do the item${result.yoursInChrome === 1 ? "" : "s"} listed below in Chrome. ` : "";
     if (next.kind === "submit") {
-      return out("review", `All pages are filled. Check everything in Chrome, then press ${next.text || "Submit"} yourself.`);
+      return out("review", `${yours}Everything else is filled. Check it in Chrome, then press ${next.text || "Submit"} yourself.`);
     }
     if (!flow.autoNext) {
-      return out("waiting", `Filled “${step}”. Check it and press ${next.text || "Next"} in Chrome; the next page fills itself. Press Submit yourself at the end.`);
+      return out("waiting", `${yours}Filled “${step}”. Check it and press ${next.text || "Next"} in Chrome; the next page fills itself. Press Submit yourself at the end.`);
     }
     if (next.kind === "none") {
       return out("waiting", `Couldn't find a Next button on “${step}”. Move on in Chrome and it carries on.`);
